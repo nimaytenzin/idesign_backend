@@ -1,1 +1,4 @@
-export class CreateBuildingsGeomDto {}
+export class CreateBuildingsGeomDto {
+    buildingId:number;
+    geom:string;
+}

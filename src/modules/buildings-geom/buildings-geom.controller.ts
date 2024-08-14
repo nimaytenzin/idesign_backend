@@ -17,9 +17,9 @@ export class BuildingsGeomController {
     return this.buildingsGeomService.findAll();
   }
 
-  @Get(':id')
+  @Get('bid/:id')
   findOne(@Param('id') id: string) {
-    return this.buildingsGeomService.findOne(+id);
+    return this.buildingsGeomService.findOneByBuildingId(+id);
   }
 
   @Patch(':id')
