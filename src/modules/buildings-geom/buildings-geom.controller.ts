@@ -5,30 +5,15 @@ import { UpdateBuildingsGeomDto } from './dto/update-buildings-geom.dto';
 
 @Controller('buildings-geom')
 export class BuildingsGeomController {
-  constructor(private readonly buildingsGeomService: BuildingsGeomService) {}
+  constructor(private readonly buildingsGeomService: BuildingsGeomService) { }
 
   @Post()
   create(@Body() createBuildingsGeomDto: CreateBuildingsGeomDto) {
     return this.buildingsGeomService.create(createBuildingsGeomDto);
   }
 
-  @Get()
-  findAll() {
-    return this.buildingsGeomService.findAll();
-  }
-
   @Get('bid/:id')
   findOne(@Param('id') id: string) {
     return this.buildingsGeomService.findOneByBuildingId(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateBuildingsGeomDto: UpdateBuildingsGeomDto) {
-    return this.buildingsGeomService.update(+id, updateBuildingsGeomDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.buildingsGeomService.remove(+id);
   }
 }
