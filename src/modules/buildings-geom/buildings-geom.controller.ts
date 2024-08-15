@@ -16,4 +16,14 @@ export class BuildingsGeomController {
   findOne(@Param('id') id: string) {
     return this.buildingsGeomService.findOneByBuildingId(+id);
   }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() updateBuildingsGeomDto: UpdateBuildingsGeomDto) {
+    return this.buildingsGeomService.updateByBuildingId(+id, updateBuildingsGeomDto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.buildingsGeomService.remove(+id);
+  }
 }

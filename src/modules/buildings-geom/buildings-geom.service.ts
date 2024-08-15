@@ -44,11 +44,17 @@ export class BuildingsGeomService {
     return featureCollection.jsonb_build_object;
   }
 
-  update(id: number, updateBuildingsGeomDto: UpdateBuildingsGeomDto) {
-    return `This action updates a #${id} buildingsGeom`;
+  async updateByBuildingId(id: number, updateBuildingsGeomDto: UpdateBuildingsGeomDto) {
+    const result = await this.buildingGeomRepository.sequelize.query(
+      `UPDATE "BuildingsGeoms" SET "geom" = ST_GeomFromGeoJSON( '${updateBuildingsGeomDto.geom}') where "buildingId" = ${id}`
+    )
+    return result
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} buildingsGeom`;
+  async remove(id: number) {
+    const data: any = await this.buildingGeomRepository.sequelize.query(
+      `Delete FROM "BuildingsGeoms" where "buildingId" = '${id}'`,
+    );
+    return data;
   }
 }
