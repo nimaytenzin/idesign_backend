@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { CreateBuildingsGeomDto } from './dto/create-buildings-geom.dto';
 import { UpdateBuildingsGeomDto } from './dto/update-buildings-geom.dto';
 import { BuildingsGeom } from './entities/buildings-geom.entity';
+import { geoJson } from 'src/constants/constants';
 
 @Injectable()
 export class BuildingsGeomService {
@@ -11,10 +12,14 @@ export class BuildingsGeomService {
   ) { }
 
   async create(createBuildingsGeomDto: CreateBuildingsGeomDto) {
+    const geoJsonData:geoJson = createBuildingsGeomDto.geom
+    geoJsonData.features[0].geometry.type = 'MultiPolygon';
+    var geomData = JSON.stringify(geoJsonData.features[0].geometry);
+
     const result = await this.buildingGeomRepository.sequelize.query(
       `INSERT INTO "BuildingsGeoms" ("buildingId","geom") values (
         ${createBuildingsGeomDto.buildingId},
-        ST_GeomFromGeoJSON( '${createBuildingsGeomDto.geom}')
+        ST_GeomFromGeoJSON( '${geomData}')
       );`
     )
     return result
