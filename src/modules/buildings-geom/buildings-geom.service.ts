@@ -9,57 +9,55 @@ export class BuildingsGeomService {
   constructor(
     @Inject('BUILDINGGEOM_REPOSITORY')
     private readonly buildingGeomRepository: typeof BuildingsGeom,
-  ) { }
+  ) {}
 
-  async create(createBuildingsGeomDto: CreateBuildingsGeomDto) {
-    const geoJsonData:geoJson = createBuildingsGeomDto.geom
-    geoJsonData.features[0].geometry.type = 'MultiPolygon';
-    var geomData = JSON.stringify(geoJsonData.features[0].geometry);
+  async findPlotsByBuildingIDArray(buildingIdCSVString: string) {
+    const buildingIdArray = buildingIdCSVString.split(',');
 
-    const result = await this.buildingGeomRepository.sequelize.query(
-      `INSERT INTO "BuildingsGeoms" ("buildingId","geom") values (
-        ${createBuildingsGeomDto.buildingId},
-        ST_GeomFromGeoJSON( '${geomData}')
-      );`
-    )
-    return result
+    let multiGeom = {
+      type: 'FeatureCollection',
+      features: [],
+    };
+
+    for (let buildingId of buildingIdArray) {
+      let buildingGeom = await this.buildingGeomRepository.findOne({
+        where: {
+          buildingId: buildingId,
+        },
+      });
+
+      multiGeom.features.push({
+        type: 'Feature',
+        geometry: buildingGeom.geom,
+        properties: {
+          buildingId: buildingGeom.buildingId,
+          id: buildingGeom.id,
+        },
+      });
+    }
+
+    return multiGeom;
   }
 
-  findAll() {
-    return `This action returns all buildingsGeom`;
-  }
+  async findAllBuildings() {
+    let multiGeom = {
+      type: 'FeatureCollection',
+      features: [],
+    };
 
-  async findOneByBuildingId(id: number) {
-    const data: any = await this.buildingGeomRepository.sequelize.query(
-      `SELECT jsonb_build_object(
-      'type',     'FeatureCollection',
-      'features', jsonb_agg(features.feature)
-    )
-    FROM (
-      SELECT jsonb_build_object(
-        'type',       'Feature',
-        'geometry',   ST_AsGeoJSON(geom)::jsonb,
-        'properties', to_jsonb(inputs) - 'geom'
-      ) AS feature
-      FROM (SELECT * FROM "BuildingsGeoms" where "buildingId" = ${id}) inputs) features;`,
-    );
+    let buildingGeoms = await this.buildingGeomRepository.findAll();
 
-    const featureCollection = data[0][0];
+    for (let buildingGeom of buildingGeoms) {
+      multiGeom.features.push({
+        type: 'Feature',
+        geometry: buildingGeom.geom,
+        properties: {
+          buildingId: buildingGeom.buildingId,
+          id: buildingGeom.id,
+        },
+      });
+    }
 
-    return featureCollection.jsonb_build_object;
-  }
-
-  async updateByBuildingId(id: number, updateBuildingsGeomDto: UpdateBuildingsGeomDto) {
-    const result = await this.buildingGeomRepository.sequelize.query(
-      `UPDATE "BuildingsGeoms" SET "geom" = ST_GeomFromGeoJSON( '${updateBuildingsGeomDto.geom}') where "buildingId" = ${id}`
-    )
-    return result
-  }
-
-  async remove(id: number) {
-    const data: any = await this.buildingGeomRepository.sequelize.query(
-      `Delete FROM "BuildingsGeoms" where "buildingId" = '${id}'`,
-    );
-    return data;
+    return multiGeom;
   }
 }

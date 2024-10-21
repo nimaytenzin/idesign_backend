@@ -7,6 +7,7 @@ import {
   TEST,
 } from 'src/constants/constants';
 import { BuildingsGeom } from 'src/modules/buildings-geom/entities/buildings-geom.entity';
+import { PlotGeom } from 'src/modules/plots-geom/entities/plots-geom.entity';
 
 export const databaseProviders = [
   {
@@ -30,9 +31,7 @@ export const databaseProviders = [
           config = databaseConfig.development;
       }
       const sequelize = new Sequelize(config);
-      sequelize.addModels([
-        BuildingsGeom
-      ]);
+      sequelize.addModels([BuildingsGeom, PlotGeom]);
 
       await sequelize.sync();
       return sequelize;
