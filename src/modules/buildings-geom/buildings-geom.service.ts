@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { CreateBuildingsGeomDto } from './dto/create-buildings-geom.dto';
 import { UpdateBuildingsGeomDto } from './dto/update-buildings-geom.dto';
 import { BuildingsGeom } from './entities/buildings-geom.entity';
@@ -26,14 +26,23 @@ export class BuildingsGeomService {
         },
       });
 
-      multiGeom.features.push({
-        type: 'Feature',
-        geometry: buildingGeom.geom,
-        properties: {
-          buildingId: buildingGeom.buildingId,
-          id: buildingGeom.id,
-        },
-      });
+      if (!buildingGeom) {
+        throw new HttpException(
+          'Plot Geometry Not Found',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      if (buildingGeom) {
+        multiGeom.features.push({
+          type: 'Feature',
+          geometry: buildingGeom.geom,
+          properties: {
+            buildingId: buildingGeom.buildingId,
+            id: buildingGeom.id,
+          },
+        });
+      }
     }
 
     return multiGeom;

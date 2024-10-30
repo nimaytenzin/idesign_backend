@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { CreatePlotsGeomDto } from './dto/create-plots-geom.dto';
 import { UpdatePlotsGeomDto } from './dto/update-plots-geom.dto';
 import { PlotGeom } from './entities/plots-geom.entity';
@@ -24,6 +24,13 @@ export class PlotsGeomService {
           plotId: plotId,
         },
       });
+
+      if (!plotGeom) {
+        throw new HttpException(
+          'Plot Geometry Not Found',
+          HttpStatus.NOT_FOUND,
+        );
+      }
 
       multiGeom.features.push({
         type: 'Feature',
