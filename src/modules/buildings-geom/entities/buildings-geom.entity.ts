@@ -1,13 +1,12 @@
-import { Column, DataType, Model, Table } from "sequelize-typescript";
+import { Column, DataType, Model, Table } from 'sequelize-typescript';
 
 @Table({
-    timestamps:false
+  timestamps: false,
 })
-export class BuildingsGeom extends Model{
-    @Column(DataType.INTEGER)
-    buildingId: number;
+export class BuildingsGeom extends Model {
+  @Column(DataType.INTEGER)
+  zhicharBuildingId: number;
 
-    @Column(DataType.GEOMETRY('MULTIPOLYGON'))
-    geom: string;
+  @Column(DataType.GEOMETRY('MULTIPOLYGON'))
+  geom: string;
 }
-

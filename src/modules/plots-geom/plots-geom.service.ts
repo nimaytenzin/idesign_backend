@@ -19,27 +19,29 @@ export class PlotsGeomService {
     };
 
     for (let plotId of plotIdArray) {
-      let plotGeom = await this.plotsGeomRepository.findOne({
-        where: {
-          plotId: plotId,
-        },
-      });
+      try {
+        let plotGeom = await this.plotsGeomRepository.findOne({
+          where: {
+            plotId: plotId,
+          },
+        });
 
-      if (!plotGeom) {
-        throw new HttpException(
-          'Plot Geometry Not Found',
-          HttpStatus.NOT_FOUND,
-        );
+        if (plotGeom) {
+          multiGeom.features.push({
+            type: 'Feature',
+            geometry: plotGeom.geom,
+            properties: {
+              plotId: plotGeom.plotId,
+              id: plotGeom.id,
+            },
+          });
+        } else {
+          console.warn(`Plot Geometry not found for plotId: ${plotId}`);
+        }
+      } catch (error) {
+        console.error(`Error fetching geometry for plotId ${plotId}:`, error);
+        // Optionally handle specific errors if needed
       }
-
-      multiGeom.features.push({
-        type: 'Feature',
-        geometry: plotGeom.geom,
-        properties: {
-          plotId: plotGeom.plotId,
-          id: plotGeom.id,
-        },
-      });
     }
 
     return multiGeom;

@@ -11,43 +11,48 @@ export class BuildingsGeomService {
     private readonly buildingGeomRepository: typeof BuildingsGeom,
   ) {}
 
-  async findPlotsByBuildingIDArray(buildingIdCSVString: string) {
-    const buildingIdArray = buildingIdCSVString.split(',');
+  async findBuildingsByBuildingIdCsv(plotArray: string) {
+    const buildingIdArray = plotArray.split(',');
 
     let multiGeom = {
       type: 'FeatureCollection',
       features: [],
     };
 
+    console.log(buildingIdArray);
     for (let buildingId of buildingIdArray) {
-      let buildingGeom = await this.buildingGeomRepository.findOne({
-        where: {
-          buildingId: buildingId,
-        },
-      });
-
-      if (!buildingGeom) {
-        throw new HttpException(
-          'Plot Geometry Not Found',
-          HttpStatus.NOT_FOUND,
-        );
-      }
-
-      if (buildingGeom) {
-        multiGeom.features.push({
-          type: 'Feature',
-          geometry: buildingGeom.geom,
-          properties: {
-            buildingId: buildingGeom.buildingId,
-            id: buildingGeom.id,
+      try {
+        let buildingGeom = await this.buildingGeomRepository.findOne({
+          where: {
+            zhicharBuildingId: Number(buildingId),
           },
         });
+
+        if (buildingGeom) {
+          multiGeom.features.push({
+            type: 'Feature',
+            geometry: buildingGeom.geom,
+            properties: {
+              zhicharBuildingId: buildingGeom.zhicharBuildingId,
+              id: buildingGeom.id,
+            },
+          });
+        } else {
+          console.warn(
+            `Building Geometry not found for Building: ${buildingId}`,
+          );
+        }
+      } catch (error) {
+        console.error(
+          `Error fetching geometry for building ID ${buildingId}:`,
+          error,
+        );
+        // Optionally handle specific errors if needed
       }
     }
 
     return multiGeom;
   }
-
   async findAllBuildings() {
     let multiGeom = {
       type: 'FeatureCollection',
@@ -61,7 +66,7 @@ export class BuildingsGeomService {
         type: 'Feature',
         geometry: buildingGeom.geom,
         properties: {
-          buildingId: buildingGeom.buildingId,
+          zhicharBuildingId: buildingGeom.zhicharBuildingId,
           id: buildingGeom.id,
         },
       });

@@ -22,7 +22,7 @@ export class AppController {
 
   @Get('buildings/:buildingId')
   findOneBuilding(@Param('buildingId') buildingIdCSV: string) {
-    return this.builingGeomService.findPlotsByBuildingIDArray(buildingIdCSV);
+    return this.builingGeomService.findBuildingsByBuildingIdCsv(buildingIdCSV);
   }
   @Get('buildings')
   findAllBuildings() {
