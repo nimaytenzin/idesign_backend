@@ -6,17 +6,21 @@ import {
   SEQUELIZE,
   TEST,
 } from 'src/constants/constants';
-import { BuildingsGeom } from 'src/modules/buildings-geom/entities/buildings-geom.entity';
-import { PlotGeom } from 'src/modules/plots-geom/entities/plots-geom.entity';
+import { Dzongkhag } from 'src/modules/dzongkhag/entities/dzongkhag.entity';
+import { AdministrativeZone } from 'src/modules/administrative-zone/entities/administrative-zone.entity';
+import { SubAdministrativeZone } from 'src/modules/sub-administrative-zone/entities/sub-administrative-zone.entity';
+import { EnumerationArea } from 'src/modules/enumeration-area/entities/enumeration-area.entity';
+import { User } from 'src/modules/auth/entities/user.entity';
+import { CurrentHouseholdListing } from 'src/modules/household-listings/current-household-listing/entities/current-household-listing.entity';
+import { Survey } from 'src/modules/survey/survey/entities/survey.entity';
+import { SurveyEnumerationArea } from 'src/modules/survey/survey/entities/survey-enumeration-area.entity';
 
 export const databaseProviders = [
   {
     provide: SEQUELIZE,
     useFactory: async () => {
       let config;
-      //console.log('LOADING ENVIRONMENT VARIABLE');
-      //console.log(process.env.NODE_ENV);
-      //console.log(databaseConfig.development);
+
       switch (process.env.NODE_ENV) {
         case DEVELOPMENT:
           config = databaseConfig.development;
@@ -31,7 +35,16 @@ export const databaseProviders = [
           config = databaseConfig.development;
       }
       const sequelize = new Sequelize(config);
-      sequelize.addModels([BuildingsGeom, PlotGeom]);
+      sequelize.addModels([
+        User,
+        Dzongkhag,
+        AdministrativeZone,
+        SubAdministrativeZone,
+        EnumerationArea,
+        CurrentHouseholdListing,
+        Survey,
+        SurveyEnumerationArea,
+      ]);
 
       await sequelize.sync();
       return sequelize;
