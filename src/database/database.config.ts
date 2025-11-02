@@ -8,7 +8,7 @@ export interface IDatabaseConfigAttributes {
   port?: number | string;
   dialect?: string;
   urlDatabase?: string;
-  logging?:boolean;
+  logging?: boolean;
 }
 
 export interface IDatabaseConfig {
@@ -27,7 +27,7 @@ export const databaseConfig: IDatabaseConfig = {
     host: process.env.DB_HOST_DEVELOPMENT,
     port: process.env.DB_PORT_DEVELOPMENT,
     dialect: process.env.DB_DIALECT,
-    logging:false
+    logging: false,
   },
   test: {
     username: process.env.DB_USER_TEST,
@@ -36,7 +36,7 @@ export const databaseConfig: IDatabaseConfig = {
     host: process.env.DB_HOST_TEST,
     port: process.env.DB_PORT_TEST,
     dialect: process.env.DB_DIALECT,
-    logging:false
+    logging: false,
   },
   production: {
     username: process.env.DB_USER_PRODUCTION,
@@ -44,6 +44,6 @@ export const databaseConfig: IDatabaseConfig = {
     database: process.env.DB_NAME_PRODUCTION,
     host: process.env.DB_HOST_PRODUCION,
     dialect: process.env.DB_DIALECT,
-    logging:false
+    logging: false,
   },
 };

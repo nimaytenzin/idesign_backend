@@ -6,14 +6,11 @@ import {
   SEQUELIZE,
   TEST,
 } from 'src/constants/constants';
-import { Dzongkhag } from 'src/modules/dzongkhag/entities/dzongkhag.entity';
-import { AdministrativeZone } from 'src/modules/administrative-zone/entities/administrative-zone.entity';
-import { SubAdministrativeZone } from 'src/modules/sub-administrative-zone/entities/sub-administrative-zone.entity';
-import { EnumerationArea } from 'src/modules/enumeration-area/entities/enumeration-area.entity';
 import { User } from 'src/modules/auth/entities/user.entity';
-import { CurrentHouseholdListing } from 'src/modules/household-listings/current-household-listing/entities/current-household-listing.entity';
-import { Survey } from 'src/modules/survey/survey/entities/survey.entity';
-import { SurveyEnumerationArea } from 'src/modules/survey/survey/entities/survey-enumeration-area.entity';
+import { ProductCategory } from 'src/modules/product-category/entities/product-category.entity';
+import { ProductSubCategory } from 'src/modules/product-sub-category/entities/product-sub-category.entity';
+import { Product } from 'src/modules/product/entities/product.entity';
+import { ProductImage } from 'src/modules/product/entities/product-image.entity';
 
 export const databaseProviders = [
   {
@@ -34,16 +31,14 @@ export const databaseProviders = [
         default:
           config = databaseConfig.development;
       }
+      console.log('Database Config:', config);
       const sequelize = new Sequelize(config);
       sequelize.addModels([
         User,
-        Dzongkhag,
-        AdministrativeZone,
-        SubAdministrativeZone,
-        EnumerationArea,
-        CurrentHouseholdListing,
-        Survey,
-        SurveyEnumerationArea,
+        ProductCategory,
+        ProductSubCategory,
+        Product,
+        ProductImage,
       ]);
 
       await sequelize.sync();

@@ -1,5 +1,5 @@
 {
-  "name": "geometry_server",
+  "name": "idesign_backend",
   "version": "0.0.1",
   "description": "",
   "author": "",
@@ -34,6 +34,7 @@
     "class-validator": "^0.14.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "mysql2": "^3.15.3",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.12.0",
