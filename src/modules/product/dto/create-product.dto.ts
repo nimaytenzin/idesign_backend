@@ -36,15 +36,20 @@ export class CreateProductDto {
   @IsNotEmpty()
   material: string;
 
-  @IsNumber()
-  @Min(0)
-  stockQuantity: number;
-
   @IsBoolean()
   @IsOptional()
   isAvailable?: boolean;
 
+  @IsBoolean()
+  @IsOptional()
+  isFeatured?: boolean;
+
   @IsNumber()
   @IsNotEmpty()
   productSubCategoryId: number;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  stockQuantity?: number;
 }

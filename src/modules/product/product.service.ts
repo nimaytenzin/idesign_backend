@@ -10,6 +10,10 @@ import { CreateProductImageDto } from './dto/create-product-image.dto';
 import { UpdateProductImageDto } from './dto/update-product-image.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { Op, Order } from 'sequelize';
+import { DiscountProduct } from '../discount/entities/discount-product.entity';
+import { Discount, DiscountType } from '../discount/entities/discount.entity';
+import { DiscountCategory } from '../discount/entities/discount-category.entity';
+import { DiscountSubcategory } from '../discount/entities/discount-subcategory.entity';
 
 @Injectable()
 export class ProductService {
@@ -22,6 +26,14 @@ export class ProductService {
     private productSubCategoryModel: typeof ProductSubCategory,
     @InjectModel(ProductCategory)
     private productCategoryModel: typeof ProductCategory,
+    @InjectModel(DiscountProduct)
+    private discountProductModel: typeof DiscountProduct,
+    @InjectModel(Discount)
+    private discountModel: typeof Discount,
+    @InjectModel(DiscountCategory)
+    private discountCategoryModel: typeof DiscountCategory,
+    @InjectModel(DiscountSubcategory)
+    private discountSubcategoryModel: typeof DiscountSubcategory,
   ) {}
 
   async create(createProductDto: CreateProductDto): Promise<Product> {
@@ -35,15 +47,24 @@ export class ProductService {
 
     const productData = {
       ...createProductDto,
-      isAvailable:
-        createProductDto.isAvailable ?? createProductDto.stockQuantity > 0,
+      isAvailable: createProductDto.isAvailable ?? true,
+      isFeatured: createProductDto.isFeatured ?? false,
     };
 
     return this.productModel.create(productData);
   }
 
+  private getActiveDiscountWhere() {
+    const now = new Date();
+    return {
+      isActive: true,
+      startDate: { [Op.lte]: now },
+      endDate: { [Op.gte]: now },
+    };
+  }
+
   async findAll(): Promise<Product[]> {
-    return this.productModel.findAll({
+    const products = await this.productModel.findAll({
       include: [
         {
           model: ProductSubCategory,
@@ -62,9 +83,66 @@ export class ProductService {
           as: 'images',
           required: false,
         },
+        {
+          model: DiscountProduct,
+          as: 'discountProducts',
+          required: false,
+          include: [
+            {
+              model: Discount,
+              as: 'discount',
+              where: this.getActiveDiscountWhere(),
+              required: true,
+            },
+          ],
+        },
       ],
       order: [['createdAt', 'DESC']],
     });
+    return products;
+  }
+
+  async findAllFeatured(): Promise<Product[]> {
+    const products = await this.productModel.findAll({
+      where: {
+        isFeatured: true,
+        isAvailable: true,
+      },
+      include: [
+        {
+          model: ProductSubCategory,
+          as: 'productSubCategory',
+          attributes: ['id', 'name', 'description'],
+          include: [
+            {
+              model: ProductCategory,
+              as: 'productCategory',
+              attributes: ['id', 'name', 'description'],
+            },
+          ],
+        },
+        {
+          model: ProductImage,
+          as: 'images',
+          required: false,
+        },
+        {
+          model: DiscountProduct,
+          as: 'discountProducts',
+          required: false,
+          include: [
+            {
+              model: Discount,
+              as: 'discount',
+              where: this.getActiveDiscountWhere(),
+              required: true,
+            },
+          ],
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+    return products;
   }
 
   async findAllWithQuery(queryDto: ProductQueryDto): Promise<Product[]> {
@@ -72,7 +150,18 @@ export class ProductService {
     const order: Order = [];
 
     // Build where conditions
-    if (queryDto.category) {
+    // Support both category (name) and categoryId
+    if (queryDto.categoryId) {
+      // Find subcategories by categoryId
+      const subcategories = await this.productSubCategoryModel.findAll({
+        where: { productCategoryId: queryDto.categoryId },
+      });
+      if (subcategories.length > 0) {
+        where.productSubCategoryId = {
+          [Op.in]: subcategories.map((sub) => sub.id),
+        };
+      }
+    } else if (queryDto.category) {
       // Find category by name first, then find subcategories
       const category = await this.productCategoryModel.findOne({
         where: { name: { [Op.iLike]: `%${queryDto.category}%` } },
@@ -89,12 +178,25 @@ export class ProductService {
       }
     }
 
+    // Support subCategoryId
+    if (queryDto.subCategoryId) {
+      where.productSubCategoryId = queryDto.subCategoryId;
+    }
+
     if (queryDto.material) {
       where.material = { [Op.iLike]: `%${queryDto.material}%` };
     }
 
-    if (queryDto.availability !== undefined) {
+    // Support both availability and isAvailable (legacy support)
+    if (queryDto.isAvailable !== undefined) {
+      where.isAvailable = queryDto.isAvailable;
+    } else if (queryDto.availability !== undefined) {
       where.isAvailable = queryDto.availability;
+    }
+
+    // Support isFeatured filter
+    if (queryDto.isFeatured !== undefined) {
+      where.isFeatured = queryDto.isFeatured;
     }
 
     if (queryDto.search) {
@@ -129,7 +231,7 @@ export class ProductService {
         order.push(['createdAt', 'DESC']);
     }
 
-    return this.productModel.findAll({
+    const products = await this.productModel.findAll({
       where,
       order,
       include: [
@@ -150,8 +252,22 @@ export class ProductService {
           as: 'images',
           required: false,
         },
+        {
+          model: DiscountProduct,
+          as: 'discountProducts',
+          required: false,
+          include: [
+            {
+              model: Discount,
+              as: 'discount',
+              where: this.getActiveDiscountWhere(),
+              required: false,
+            },
+          ],
+        },
       ],
     });
+    return products;
   }
 
   async findOne(id: number): Promise<Product> {
@@ -173,6 +289,19 @@ export class ProductService {
           model: ProductImage,
           as: 'images',
           required: false,
+        },
+        {
+          model: DiscountProduct,
+          as: 'discountProducts',
+          required: false,
+          include: [
+            {
+              model: Discount,
+              as: 'discount',
+              where: this.getActiveDiscountWhere(),
+              required: true,
+            },
+          ],
         },
       ],
     });
@@ -204,13 +333,6 @@ export class ProductService {
       ...updateProductDto,
     };
 
-    // Update availability based on stock if not explicitly set
-    if (
-      updateProductDto.stockQuantity !== undefined &&
-      updateProductDto.isAvailable === undefined
-    ) {
-      updateData.isAvailable = updateProductDto.stockQuantity > 0;
-    }
 
     await product.update(updateData);
     return this.findOne(id);
@@ -317,4 +439,5 @@ export class ProductService {
     await productImage.update({ isPrimary: true });
     return productImage;
   }
+
 }

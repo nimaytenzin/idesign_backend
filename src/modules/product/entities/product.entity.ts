@@ -12,6 +12,7 @@ import {
 } from 'sequelize-typescript';
 import { ProductSubCategory } from '../../product-sub-category/entities/product-sub-category.entity';
 import { ProductImage } from './product-image.entity';
+import { DiscountProduct } from '../../discount/entities/discount-product.entity';
 
 @Table({
   tableName: 'products',
@@ -66,18 +67,19 @@ export class Product extends Model<Product> {
   material: string;
 
   @Column({
-    type: DataType.INTEGER,
-    allowNull: false,
-    defaultValue: 0,
-  })
-  stockQuantity: number;
-
-  @Column({
     type: DataType.BOOLEAN,
     allowNull: false,
     defaultValue: true,
   })
   isAvailable: boolean;
+
+  @Default(false)
+  @Column({
+    type: DataType.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  })
+  isFeatured: boolean;
 
   @ForeignKey(() => ProductSubCategory)
   @Column({
@@ -102,9 +104,20 @@ export class Product extends Model<Product> {
   })
   salesCount: number;
 
+  @Default(0)
+  @Column({
+    type: DataType.INTEGER,
+    allowNull: false,
+    defaultValue: 0,
+  })
+  stockQuantity: number;
+
   @BelongsTo(() => ProductSubCategory)
   productSubCategory: ProductSubCategory;
 
   @HasMany(() => ProductImage)
   images: ProductImage[];
+
+  @HasMany(() => DiscountProduct)
+  discountProducts: DiscountProduct[];
 }

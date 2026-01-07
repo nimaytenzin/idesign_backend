@@ -156,6 +156,10 @@ export class AuthService {
   async validateUser(userId: number) {
     const user = await this.userRepository.findByPk(userId);
 
+    if (!user) {
+      return null;
+    }
+
     const { password, ...userWithoutPassword } = user.toJSON();
     return userWithoutPassword;
   }

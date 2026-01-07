@@ -116,6 +116,11 @@ export class ProductController {
     return this.productService.findAllWithQuery(query);
   }
 
+  @Get('featured')
+  findAllFeatured(): Promise<Product[]> {
+    return this.productService.findAllFeatured();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string): Promise<Product> {
     return this.productService.findOne(+id);
