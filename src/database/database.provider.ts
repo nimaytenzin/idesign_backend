@@ -23,6 +23,7 @@ import { DiscountProduct } from 'src/modules/discount/entities/discount-product.
 import { DiscountCategory } from 'src/modules/discount/entities/discount-category.entity';
 import { DiscountSubcategory } from 'src/modules/discount/entities/discount-subcategory.entity';
 import { OrderItem } from 'src/modules/order/entities/order-item.entity';
+import { OrderDiscount } from 'src/modules/order/entities/order-discount.entity';
 import { Outbox } from 'src/modules/outbox/entities/outbox.entity';
 import { Event } from 'src/modules/calendar/entities/event.entity';
 import { EventType } from 'src/modules/calendar/entities/event-type.entity';
@@ -63,7 +64,7 @@ export const databaseProviders = [
         ProductImage,
         Order,
         OrderItem,
-        
+        OrderDiscount,
         Customer,
          Outbox,
         ChartOfAccounts,
