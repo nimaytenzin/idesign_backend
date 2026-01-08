@@ -37,21 +37,18 @@ export class DocumentService {
       let fileSize: number;
       let fileType: string;
 
-      if (file) {
-        // Validate file type
-        if (!this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+       if (!this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
           throw new BadRequestException(
-            `File type not allowed. Allowed types: images (JPEG, PNG, GIF, WebP), PDF, Word documents, and Excel files`,
+            `File type not allowed. Allowed types: images (JPEG, PNG), PDF, Word documents, and Excel files`,
           );
-        }
-
+        } else {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
         const ext = path.extname(file.originalname);
         fileName = `document-${uniqueSuffix}${ext}`;
         fileUrl = `/uploads/documents/${fileName}`;
         fileSize = file.size;
         fileType = file.mimetype;
-      }
+        }
 
       return await this.documentModel.create({
         subCategoryId: createDocumentDto.subCategoryId,
