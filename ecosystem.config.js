@@ -16,6 +16,12 @@ module.exports = {
       wait_ready: true, // Wait for ready signal
       listen_timeout: 10000, // Timeout for listen event
       shutdown_with_message: true, // Graceful shutdown
+      env: {
+        NODE_ENV: 'development',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+      },
     },
   ],
 
