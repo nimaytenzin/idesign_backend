@@ -7,8 +7,10 @@ import {
   AutoIncrement,
   ForeignKey,
   BelongsTo,
+  HasMany,
 } from 'sequelize-typescript';
 import { DocumentCategory } from '../../document-category/entities/document-category.entity';
+import { Document } from '../../document/entities/document.entity';
 
 @Table({
   tableName: 'document_sub_categories',
@@ -39,5 +41,8 @@ export class DocumentSubCategory extends Model {
 
   @BelongsTo(() => DocumentCategory)
   category: DocumentCategory;
+
+  @HasMany(() => Document)
+  documents: Document[];
 }
 
