@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/sequelize';
 import { DocumentSubCategory } from './entities/document-sub-category.entity';
 import { UpdateDocumentSubCategoryDto } from './dto/update-document-sub-category.dto';
 import { CreateDocumentSubCategoryDto } from './dto/create-document-sub-category.dto';
+import { DocumentCategory } from '../document-category/entities/document-category.entity';
 
 @Injectable()
 export class DocumentSubCategoryService {
@@ -28,15 +29,30 @@ export class DocumentSubCategoryService {
   }
 
   async findAll(): Promise<DocumentSubCategory[]> {
-    return await this.documentSubCategoryModel.findAll({
-      include: ['category'],
-    });
+     return this.documentSubCategoryModel.findAll({
+             include: [
+               {
+                 model: DocumentCategory,
+                 as: 'category',
+                 required: true,
+               },
+             ],
+             order: [['subCategoryName', 'ASC']],
+           });
   }
 
   async findOne(id: number): Promise<DocumentSubCategory> {
-    const subCategory = await this.documentSubCategoryModel.findByPk(id, {
-      include: ['category'],
-    });
+
+    const subCategory = await this.documentSubCategoryModel.findByPk(id,{
+              include: [
+                {
+                  model: DocumentCategory,
+                  as: 'category',
+                  required: true,
+                  order: [['subCategoryName', 'ASC']],
+                },
+              ],
+            });
     if (!subCategory) {
       throw new NotFoundException(
         `Document sub-category with ID ${id} not found`,
