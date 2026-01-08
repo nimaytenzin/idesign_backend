@@ -45,6 +45,7 @@ export class ProductController {
     return this.productService.create(createProductDto);
   }
 
+  // ProductImage endpoints - Must come before generic :id routes
   @Post(':id/images')
   @UseInterceptors(
     FilesInterceptor('images', 10, {
@@ -106,19 +107,50 @@ export class ProductController {
     return images;
   }
 
+  @Get(':id/images')
+  getProductImages(@Param('id') id: string): Promise<ProductImage[]> {
+    return this.productService.getProductImages(+id);
+  }
+
+  @Patch(':productId/images/:imageId')
+  updateImage(
+    @Param('productId') productId: string,
+    @Param('imageId') imageId: string,
+    @Body() updateImageDto: UpdateProductImageDto,
+  ): Promise<ProductImage> {
+    return this.productService.updateImage(+imageId, updateImageDto);
+  }
+
+  @Delete(':productId/images/:imageId')
+  removeImage(
+    @Param('productId') productId: string,
+    @Param('imageId') imageId: string,
+  ): Promise<void> {
+    return this.productService.removeImage(+imageId);
+  }
+
+  @Patch(':productId/images/:imageId/primary')
+  setPrimaryImage(
+    @Param('productId') productId: string,
+    @Param('imageId') imageId: string,
+  ): Promise<ProductImage> {
+    return this.productService.setPrimaryImage(+productId, +imageId);
+  }
+
+  // Specific routes before generic routes
   @Get('admin')
   findAllAdmin(): Promise<Product[]> {
     return this.productService.findAll();
   }
 
-  @Get()
-  findAll(@Query() query: ProductQueryDto): Promise<Product[]> {
-    return this.productService.findAllWithQuery(query);
-  }
-
   @Get('featured')
   findAllFeatured(): Promise<Product[]> {
     return this.productService.findAllFeatured();
+  }
+
+  @Get()
+  findAll(@Query() query: ProductQueryDto): Promise<Product[]> {
+    return this.productService.findAllWithQuery(query);
   }
 
   @Get(':id')
@@ -150,36 +182,5 @@ export class ProductController {
     @Body() body: { rating: number },
   ): Promise<Product> {
     return this.productService.updateRating(+id, body.rating);
-  }
-
-  // ProductImage endpoints
-  @Get(':id/images')
-  getProductImages(@Param('id') id: string): Promise<ProductImage[]> {
-    return this.productService.getProductImages(+id);
-  }
-
-  @Patch(':productId/images/:imageId')
-  updateImage(
-    @Param('productId') productId: string,
-    @Param('imageId') imageId: string,
-    @Body() updateImageDto: UpdateProductImageDto,
-  ): Promise<ProductImage> {
-    return this.productService.updateImage(+imageId, updateImageDto);
-  }
-
-  @Delete(':productId/images/:imageId')
-  removeImage(
-    @Param('productId') productId: string,
-    @Param('imageId') imageId: string,
-  ): Promise<void> {
-    return this.productService.removeImage(+imageId);
-  }
-
-  @Patch(':productId/images/:imageId/primary')
-  setPrimaryImage(
-    @Param('productId') productId: string,
-    @Param('imageId') imageId: string,
-  ): Promise<ProductImage> {
-    return this.productService.setPrimaryImage(+productId, +imageId);
   }
 }

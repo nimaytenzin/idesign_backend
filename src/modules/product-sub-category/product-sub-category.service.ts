@@ -6,6 +6,7 @@ import {
 import { InjectModel } from '@nestjs/sequelize';
 import { ProductSubCategory } from './entities/product-sub-category.entity';
 import { ProductCategory } from '../product-category/entities/product-category.entity';
+import { Product } from '../product/entities/product.entity';
 import { CreateProductSubCategoryDto } from './dto/create-product-sub-category.dto';
 import { UpdateProductSubCategoryDto } from './dto/update-product-sub-category.dto';
 
@@ -16,6 +17,8 @@ export class ProductSubCategoryService {
     private productSubCategoryModel: typeof ProductSubCategory,
     @InjectModel(ProductCategory)
     private productCategoryModel: typeof ProductCategory,
+    @InjectModel(Product)
+    private productModel: typeof Product,
   ) {}
 
   async create(
@@ -136,8 +139,17 @@ export class ProductSubCategoryService {
   async remove(id: number): Promise<void> {
     const subCategory = await this.findOne(id);
 
-    // TODO: Check if subcategory has products before deletion
-    // This will be implemented when we update the Product entity
+    // Check if subcategory has products
+    const products = await this.productModel.findAll({
+      where: { productSubCategoryId: id },
+      limit: 1,
+    });
+
+    if (products && products.length > 0) {
+      throw new ConflictException(
+        'Cannot delete subcategory that has products. Please delete or reassign products first.',
+      );
+    }
 
     await subCategory.destroy();
   }

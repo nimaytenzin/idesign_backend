@@ -17,9 +17,7 @@ export enum ZpssBankName {
   DKBANK = 'DKBANK',
 }
 
-@Table({
-  timestamps: true,
-})
+@Table
 export class Company extends Model<Company> {
   @PrimaryKey
   @AutoIncrement

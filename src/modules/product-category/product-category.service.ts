@@ -6,6 +6,7 @@ import {
 import { InjectModel } from '@nestjs/sequelize';
 import { ProductCategory } from './entities/product-category.entity';
 import { ProductSubCategory } from '../product-sub-category/entities/product-sub-category.entity';
+import { Product } from '../product/entities/product.entity';
 import { CreateProductCategoryDto } from './dto/create-product-category.dto';
 import { UpdateProductCategoryDto } from './dto/update-product-category.dto';
 
@@ -14,6 +15,10 @@ export class ProductCategoryService {
   constructor(
     @InjectModel(ProductCategory)
     private productCategoryModel: typeof ProductCategory,
+    @InjectModel(ProductSubCategory)
+    private productSubCategoryModel: typeof ProductSubCategory,
+    @InjectModel(Product)
+    private productModel: typeof Product,
   ) {}
 
   async create(
@@ -101,18 +106,25 @@ export class ProductCategoryService {
     const category = await this.findOne(id);
 
     // Check if category has subcategories
-    const subCategories = await this.productCategoryModel.findOne({
-      where: { id },
-      include: [
-        {
-          model: ProductSubCategory,
-          as: 'subCategories',
-          required: true,
-        },
-      ],
+    const subCategories = await this.productSubCategoryModel.findAll({
+      where: { productCategoryId: id },
     });
 
-    if (subCategories) {
+    if (subCategories && subCategories.length > 0) {
+      // Check if any subcategory has products
+      for (const subCategory of subCategories) {
+        const products = await this.productModel.findAll({
+          where: { productSubCategoryId: subCategory.id },
+          limit: 1,
+        });
+
+        if (products && products.length > 0) {
+          throw new ConflictException(
+            `Cannot delete category that has subcategories with products. Please delete or reassign products in subcategory "${subCategory.name}" first.`,
+          );
+        }
+      }
+
       throw new ConflictException(
         'Cannot delete category that has subcategories. Remove subcategories first.',
       );

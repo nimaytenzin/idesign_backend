@@ -62,5 +62,16 @@ export class CompanyService {
 
     await company.destroy();
   }
+
+  async updateLogo(logoPath: string): Promise<Company> {
+    const company = await this.companyModel.findOne();
+    
+    if (!company) {
+      throw new NotFoundException('Company details not found');
+    }
+
+    await company.update({ logo: logoPath });
+    return company.reload();
+  }
 }
 
