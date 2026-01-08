@@ -23,23 +23,6 @@ export class CreateDocumentDto {
   documentTitle: string;
 
   @IsOptional()
-  @IsString()
-  fileName?: string;
-
-  @IsOptional()
-  @IsString()
-  fileUrl?: string;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  fileSize?: number;
-
-  @IsOptional()
-  @IsString()
-  fileType?: string;
-
-  @IsOptional()
   @IsNumber()
   @Min(1)
   versionNumber?: number;
