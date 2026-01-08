@@ -37,6 +37,8 @@ export const databaseProviders = [
     provide: SEQUELIZE,
     useFactory: async () => {
       let config;
+      console.log('NODE_ENV:', process.env.NODE_ENV);  
+      console.log('PRODUCTION constant:', PRODUCTION);
 
       switch (process.env.NODE_ENV) {
         case DEVELOPMENT:

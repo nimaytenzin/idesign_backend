@@ -15,7 +15,6 @@ async function bootstrap() {
 
   app.enableCors();
 
-  // Enable global validation pipe with transformation
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
@@ -24,13 +23,11 @@ async function bootstrap() {
     }),
   );
 
-  // Serve static files from uploads directory
-  // Use process.cwd() to get the project root directory
+  
   app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads/',
   });
 
-  // Increase body size limit to 50MB for large GeoJSON uploads
   app.use(bodyParser.json({ limit: '50mb' }));
   app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
