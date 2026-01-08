@@ -29,6 +29,9 @@ import { EmployeeManagementModule } from './modules/employee-management/employee
 import { CalendarModule } from './modules/calendar/calendar.module';
 import { TodoModule } from './modules/todo/todo.module';
 import { AffiliateModule } from './modules/affiliate/affiliate.module';
+import { DocumentSubCategoryModule } from './modules/document/document-sub-category/document-sub-category.module';
+import { DocumentCategoryModule } from './modules/document/document-category/document-category.module';
+import { DocumentModule } from './modules/document/document/document.module';
 
 // Get database config based on environment
 function getDatabaseConfig() {
@@ -61,7 +64,7 @@ function getDatabaseConfig() {
     host: config.host || 'localhost',
     port: config.port ? parseInt(String(config.port)) : 3306,
     username: config.username || 'root',
-    password: config.password || '',
+    password: config.password || 'secret',
     database: config.database || 'idesign',
     autoLoadModels: true,
     synchronize: true,
@@ -97,6 +100,9 @@ function getDatabaseConfig() {
     CalendarModule,
     TodoModule,
     AffiliateModule,
+    DocumentCategoryModule,
+    DocumentSubCategoryModule,
+    DocumentModule,
   ],
   controllers: [AppController],
   providers: [AppService],
