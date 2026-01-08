@@ -8,19 +8,27 @@ import {
   Delete,
   ParseIntPipe,
   Query,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { DocumentService } from './document.service';
 import { Document } from './entities/document.entity';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
+import type { Multer } from 'multer';
 
 @Controller('documents')
 export class DocumentController {
   constructor(private readonly documentService: DocumentService) {}
 
   @Post()
-  create(@Body() createDocumentDto: CreateDocumentDto): Promise<Document> {
-    return this.documentService.create(createDocumentDto);
+  @UseInterceptors(FileInterceptor('file'))
+  create(
+    @Body() createDocumentDto: CreateDocumentDto,
+    @UploadedFile() file?: Multer.File,
+  ): Promise<Document> {
+    return this.documentService.create(createDocumentDto, file);
   }
 
   @Get()

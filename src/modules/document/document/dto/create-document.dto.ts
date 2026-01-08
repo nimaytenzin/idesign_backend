@@ -5,13 +5,16 @@ import {
   IsOptional,
   Min,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateDocumentDto {
-  @IsNotEmpty()
+  @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   subCategoryId: number;
 
-  @IsNotEmpty()
+  @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   userId: number;
 
@@ -19,27 +22,25 @@ export class CreateDocumentDto {
   @IsString()
   documentTitle: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  fileName: string;
+  fileName?: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  fileUrl: string;
+  fileUrl?: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  fileSize: number;
+  fileSize?: number;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  fileType: string;
+  fileType?: string;
 
   @IsOptional()
   @IsNumber()
   @Min(1)
   versionNumber?: number;
-
-  [key: string]: any;
 }
