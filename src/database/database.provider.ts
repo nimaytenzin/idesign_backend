@@ -55,7 +55,10 @@ export const databaseProviders = [
           config = databaseConfig.development;
       }
       console.log('Database Config:', config);
-      const sequelize = new Sequelize(config);
+      const sequelize = new Sequelize({
+        ...config,
+        dialect: (config.dialect || 'mysql') as any,
+      });
       sequelize.addModels([
         User,
         ProductCategory,
