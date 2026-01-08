@@ -17,9 +17,10 @@ import { Document } from './entities/document.entity';
           cb(null, uploadDir);
         },
         filename: (req, file, cb) => {
-          const timestamp = Date.now();
-          const originalName = file.originalname.replace(/\s+/g, '_');
-          cb(null, `${timestamp}_${originalName}`);
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const ext = path.extname(file.originalname);
+          const fileName = `document-${uniqueSuffix}${ext}`;
+          cb(null, fileName);
         },
       }),
     }),

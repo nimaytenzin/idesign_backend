@@ -35,6 +35,4 @@ export class UpdateDocumentDto {
   @IsNumber()
   @Min(1)
   versionNumber?: number;
-
-  [key: string]: any;
 }

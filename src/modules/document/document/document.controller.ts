@@ -10,7 +10,9 @@ import {
   Query,
   UseInterceptors,
   UploadedFile,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { DocumentService } from './document.service';
 import { Document } from './entities/document.entity';
@@ -56,6 +58,22 @@ export class DocumentController {
     @Body() updateDocumentDto: UpdateDocumentDto,
   ): Promise<Document> {
     return this.documentService.update(id, updateDocumentDto);
+  }
+
+  @Patch(':id/metadata')
+  editMetadata(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateDocumentDto: UpdateDocumentDto,
+  ): Promise<Document> {
+    return this.documentService.editMetadata(id, updateDocumentDto);
+  }
+
+  @Get(':id/download')
+  async download(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ): Promise<void> {
+    return this.documentService.download(id, res);
   }
 
   @Patch(':id/increment-version')
