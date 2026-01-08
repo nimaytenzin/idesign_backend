@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
+import { SequelizeModule } from '@nestjs/sequelize';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
+import { databaseConfig } from './database/database.config';
+import { DEVELOPMENT, PRODUCTION, TEST } from './constants/constants';
 import { AuthModule } from './modules/auth/auth.module';
 import { ProductCategoryModule } from './modules/product-category/product-category.module';
 import { ProductSubCategoryModule } from './modules/product-sub-category/product-sub-category.module';
@@ -27,8 +30,48 @@ import { CalendarModule } from './modules/calendar/calendar.module';
 import { TodoModule } from './modules/todo/todo.module';
 import { AffiliateModule } from './modules/affiliate/affiliate.module';
 
+// Get database config based on environment
+function getDatabaseConfig() {
+  const env = process.env.NODE_ENV || DEVELOPMENT;
+  let config;
+
+  switch (env) {
+    case DEVELOPMENT:
+      config = databaseConfig.development;
+      break;
+    case TEST:
+      config = databaseConfig.test;
+      break;
+    case PRODUCTION:
+      config = databaseConfig.production;
+      break;
+    default:
+      config = databaseConfig.development;
+  }
+
+  console.log('App Module - NODE_ENV:', process.env.NODE_ENV);
+  console.log('App Module - Using database config:', {
+    host: config.host,
+    database: config.database,
+    username: config.username,
+  });
+
+  return {
+    dialect: (config.dialect as any) || 'mysql',
+    host: config.host || 'localhost',
+    port: config.port ? parseInt(String(config.port)) : 3306,
+    username: config.username || 'root',
+    password: config.password || '',
+    database: config.database || 'idesign',
+    autoLoadModels: true,
+    synchronize: true,
+    logging: config.logging !== undefined ? config.logging : false,
+  };
+}
+
 @Module({
   imports: [
+    SequelizeModule.forRoot(getDatabaseConfig()),
     DatabaseModule,
     AuthModule,
     ProductCategoryModule,
