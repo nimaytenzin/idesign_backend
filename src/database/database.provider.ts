@@ -31,7 +31,9 @@ import { EventCategory } from 'src/modules/calendar/entities/event-category.enti
 import { EmployeeEducation } from 'src/modules/employee-management/entities/employee-education.entity';
 import { EmployeeWorkExperience } from 'src/modules/employee-management/entities/employee-work-experience.entity';
 import { AffiliateCommission } from 'src/modules/affiliate/entities/affiliate-commission.entity';
-import { AffiliateCommissionResponseDto } from 'src/modules/affiliate/dto/affiliate-commission-response.dto';
+import { DocumentCategory } from 'src/modules/document/document-category/entities/document-category.entity';
+import { DocumentSubCategory } from 'src/modules/document/document-sub-category/entities/document-sub-category.entity';
+import { Document } from 'src/modules/document/document/entities/document.entity';
 
 export const databaseProviders = [
   {
@@ -84,11 +86,10 @@ export const databaseProviders = [
         EventCategory,
         EmployeeEducation,
         EmployeeWorkExperience,
-
-
-
         AffiliateCommission,
-        
+        DocumentCategory,
+        DocumentSubCategory,
+        Document,
       ]);
 
       await sequelize.sync();
