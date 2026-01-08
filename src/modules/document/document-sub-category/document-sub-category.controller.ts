@@ -12,6 +12,7 @@ import { DocumentSubCategoryService } from './document-sub-category.service';
 import { DocumentSubCategory } from './entities/document-sub-category.entity';
 import { CreateDocumentSubCategoryDto } from './dto/create-document-sub-category.dto';
 import { UpdateDocumentSubCategoryDto } from './dto/update-document-sub-category.dto';
+import { ForceDeleteDocumentSubCategoryResponseDto } from './dto/force-delete-document-sub-category-response.dto';
 
 @Controller('document-sub-categories')
 export class DocumentSubCategoryController {
@@ -52,5 +53,10 @@ export class DocumentSubCategoryController {
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
     return this.documentSubCategoryService.remove(id);
+  }
+
+  @Delete(':id/force')
+  forceDelete(@Param('id', ParseIntPipe) id: number): Promise<ForceDeleteDocumentSubCategoryResponseDto> {
+    return this.documentSubCategoryService.forceDelete(id);
   }
 }

@@ -93,6 +93,11 @@ export class DocumentCategoryService {
       );
     }
 
+    // Delete all sub-categories first (cascading deletes documents)
+    await DocumentSubCategory.destroy({
+      where: { categoryId: id },
+    });
+
     const categoryName = category.categoryName;
     const categoryId = category.categoryId;
     await category.destroy();

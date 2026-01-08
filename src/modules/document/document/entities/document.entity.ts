@@ -28,6 +28,7 @@ export class Document extends Model {
   @Column({
     type: DataType.INTEGER,
     allowNull: false,
+    onDelete: 'CASCADE',
   })
   subCategoryId: number;
 
