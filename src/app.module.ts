@@ -30,7 +30,6 @@ import { CalendarModule } from './modules/calendar/calendar.module';
 import { TodoModule } from './modules/todo/todo.module';
 import { AffiliateModule } from './modules/affiliate/affiliate.module';
 import { DocumentCategoryModule } from './modules/document/document-category/document-category.module';
-import { DocumentSubCategory } from './modules/document/document-sub-category/entities/document-sub-category.entity';
 import { DocumentSubCategoryModule } from './modules/document/document-sub-category/document-sub-category.module';
 import { DocumentModule } from './modules/document/document/document.module';
 
@@ -53,24 +52,24 @@ function getDatabaseConfig() {
       config = databaseConfig.development;
   }
 
-  console.log('App Module - NODE_ENV:', process.env.NODE_ENV);
-  console.log('App Module - Using database config:', {
-    host: config.host,
-    database: config.database,
-    username: config.username,
-  });
-
-  return {
+  // Remove password field if it's empty or undefined
+  const sequelizeConfig: any = {
     dialect: (config.dialect as any) || 'mysql',
     host: config.host || 'localhost',
     port: config.port ? parseInt(String(config.port)) : 3306,
     username: config.username || 'root',
-    password: config.password || 'secret',
     database: config.database || 'idesign',
     autoLoadModels: true,
     synchronize: true,
     logging: config.logging !== undefined ? config.logging : false,
   };
+
+  // Only include password if it's not empty
+  if (config.password && config.password.trim() !== '') {
+    sequelizeConfig.password = config.password;
+  }
+
+  return sequelizeConfig;
 }
 
 @Module({

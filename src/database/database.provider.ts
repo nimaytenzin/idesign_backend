@@ -57,10 +57,20 @@ export const databaseProviders = [
           config = databaseConfig.development;
       }
       console.log('Database Config:', config);
-      const sequelize = new Sequelize({
+      
+      // Remove password field if it's empty or undefined to avoid authentication issues
+      const sequelizeConfig: any = {
         ...config,
         dialect: (config.dialect || 'mysql') as any,
-      });
+      };
+      
+      // If password is undefined, empty string, null, or only whitespace, don't include it in the config
+      // This prevents Sequelize from trying to authenticate with an empty password
+      if (!config.password || (typeof config.password === 'string' && config.password.trim() === '')) {
+        delete sequelizeConfig.password;
+      }
+      
+      const sequelize = new Sequelize(sequelizeConfig);
       sequelize.addModels([
         User,
         ProductCategory,
