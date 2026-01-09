@@ -29,8 +29,9 @@ import { EmployeeManagementModule } from './modules/employee-management/employee
 import { CalendarModule } from './modules/calendar/calendar.module';
 import { TodoModule } from './modules/todo/todo.module';
 import { AffiliateModule } from './modules/affiliate/affiliate.module';
-import { DocumentSubCategoryModule } from './modules/document/document-sub-category/document-sub-category.module';
 import { DocumentCategoryModule } from './modules/document/document-category/document-category.module';
+import { DocumentSubCategory } from './modules/document/document-sub-category/entities/document-sub-category.entity';
+import { DocumentSubCategoryModule } from './modules/document/document-sub-category/document-sub-category.module';
 import { DocumentModule } from './modules/document/document/document.module';
 
 // Get database config based on environment
@@ -102,7 +103,7 @@ function getDatabaseConfig() {
     AffiliateModule,
     DocumentCategoryModule,
     DocumentSubCategoryModule,
-    DocumentModule,
+    DocumentModule
   ],
   controllers: [AppController],
   providers: [AppService],
