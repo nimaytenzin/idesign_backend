@@ -92,30 +92,55 @@ export class SmsService {
         success: true,
       };
     } catch (error) {
-      this.logger.error(
-        `Failed to send SMS to ${data.phoneNumber}:`,
-        error.message,
-      );
-
       // Handle different types of errors
       let errorMessage = 'SMS sending failed';
+      let statusCode: number | undefined;
 
       if (error.response) {
         // HTTP error response
-        errorMessage = `SMS API error: ${error.response.status} - ${
-          error.response.data?.message || error.response.statusText
-        }`;
+        statusCode = error.response.status;
+        const statusText = error.response.statusText || 'Unknown error';
+        const responseData = error.response.data;
+        
+        if (statusCode === 502) {
+          errorMessage = `SMS API Bad Gateway (502) - SMS service may be temporarily unavailable`;
+        } else if (statusCode === 503) {
+          errorMessage = `SMS API Service Unavailable (503) - SMS service is temporarily down`;
+        } else if (statusCode === 504) {
+          errorMessage = `SMS API Gateway Timeout (504) - SMS service took too long to respond`;
+        } else {
+          errorMessage = `SMS API error: ${statusCode} ${statusText} - ${
+            responseData?.message || responseData?.error || 'Unknown error'
+          }`;
+        }
+        
+        this.logger.error(
+          `Failed to send SMS to ${data.phoneNumber}: ${errorMessage}`,
+        );
+        this.logger.debug(
+          `SMS API Error Details: Status ${statusCode}, Response: ${JSON.stringify(responseData)}`,
+        );
       } else if (error.code === 'ECONNREFUSED') {
-        errorMessage = 'Unable to connect to SMS service';
-      } else if (error.code === 'ETIMEDOUT') {
+        errorMessage = 'Unable to connect to SMS service - Connection refused';
+        this.logger.error(
+          `Failed to send SMS to ${data.phoneNumber}: ${errorMessage}`,
+        );
+      } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
         errorMessage = 'SMS service request timed out';
+        this.logger.error(
+          `Failed to send SMS to ${data.phoneNumber}: ${errorMessage}`,
+        );
       } else {
-        errorMessage = `SMS failed: ${error.message}`;
+        errorMessage = `SMS failed: ${error.message || 'Unknown error'}`;
+        this.logger.error(
+          `Failed to send SMS to ${data.phoneNumber}: ${errorMessage}`,
+          error.stack,
+        );
       }
 
       return {
         message: errorMessage,
-        status: 'FAILED',
+        status: statusCode ? `HTTP_${statusCode}` : 'FAILED',
         success: false,
       };
     }

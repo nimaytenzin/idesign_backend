@@ -442,14 +442,14 @@ export class AccountsService {
     const cashAccount = await this.getOrCreateAccount('1010', 'Cash', 'ASSET', 'DEBIT');
     const revenueAccount = await this.getOrCreateAccount('4000', 'Sales Revenue', 'REVENUE', 'CREDIT');
 
-    const paymentDate = order.paymentDate || order.paidAt || new Date();
+    const paymentDate = order.paidAt || new Date();
 
     // Transaction 1: Debit Cash
     await this.transactionModel.create({
       accountCode: cashAccount.accountCode,
       orderId: order.id,
       date: paymentDate,
-      debitAmount: order.totalAmount,
+      debitAmount: order.totalPayable,
       creditAmount: 0,
       description: `Payment received for Order ${order.orderNumber}`,
       referenceNumber: order.receiptNumber || order.orderNumber,
@@ -461,7 +461,7 @@ export class AccountsService {
       orderId: order.id,
       date: paymentDate,
       debitAmount: 0,
-      creditAmount: order.totalAmount,
+      creditAmount: order.totalPayable,
       description: `Sales revenue from Order ${order.orderNumber}`,
       referenceNumber: order.receiptNumber || order.orderNumber,
     });
@@ -484,7 +484,7 @@ export class AccountsService {
       accountCode: revenueAccount.accountCode,
       orderId: order.id,
       date: new Date(),
-      debitAmount: order.totalAmount,
+      debitAmount: order.totalPayable,
       creditAmount: 0,
       description: `Refund issued for Order ${order.orderNumber}${reason ? `: ${reason}` : ''}`,
       referenceNumber: `REV-${order.receiptNumber}`,
@@ -496,7 +496,7 @@ export class AccountsService {
       orderId: order.id,
       date: new Date(),
       debitAmount: 0,
-      creditAmount: order.totalAmount,
+      creditAmount: order.totalPayable,
       description: `Refund issued for Order ${order.orderNumber}${reason ? `: ${reason}` : ''}`,
       referenceNumber: `REV-${order.receiptNumber}`,
     });

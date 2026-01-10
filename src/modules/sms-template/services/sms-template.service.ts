@@ -184,32 +184,32 @@ export class SmsTemplateService {
       case 'orderId':
         return order.id?.toString() || '';
       case 'orderDate':
-        return order.orderDate
-          ? new Date(order.orderDate).toLocaleDateString('en-US', {
+        return order.placedAt
+          ? new Date(order.placedAt).toLocaleDateString('en-US', {
               year: 'numeric',
               month: 'short',
               day: 'numeric',
             })
           : '';
       case 'totalAmount':
-        return order.totalAmount
-          ? `Nu. ${parseFloat(order.totalAmount.toString()).toLocaleString('en-US', {
+        return order.totalPayable
+          ? `Nu. ${parseFloat(order.totalPayable.toString()).toLocaleString('en-US', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}`
           : 'Nu. 0.00';
       case 'orderDiscount':
-        return order.orderDiscount
-          ? parseFloat(order.orderDiscount.toString()).toLocaleString('en-US', {
+        return order.discount
+          ? parseFloat(order.discount.toString()).toLocaleString('en-US', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })
           : '0.00';
       case 'subtotal':
         const subtotal =
-          parseFloat(order.totalAmount.toString()) -
-          (order.orderDiscount ? parseFloat(order.orderDiscount.toString()) : 0) -
-          (order.shippingCost ? parseFloat(order.shippingCost.toString()) : 0);
+          parseFloat(order.totalPayable.toString()) -
+          (order.discount ? parseFloat(order.discount.toString()) : 0) -
+          (order.deliveryCost ? parseFloat(order.deliveryCost.toString()) : 0);
         return subtotal.toLocaleString('en-US', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
@@ -227,8 +227,9 @@ export class SmsTemplateService {
       case 'vehicleNumber':
         return additionalData?.vehicleNumber || '';
       case 'shippingCost':
-        return order.shippingCost
-          ? parseFloat(order.shippingCost.toString()).toLocaleString('en-US', {
+      case 'deliveryCost':
+        return order.deliveryCost
+          ? parseFloat(order.deliveryCost.toString()).toLocaleString('en-US', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })
@@ -266,7 +267,8 @@ export class SmsTemplateService {
       { name: 'driverName', description: 'Driver name (if available)' },
       { name: 'driverPhone', description: 'Driver phone (if available)' },
       { name: 'vehicleNumber', description: 'Vehicle number (if available)' },
-      { name: 'shippingCost', description: 'Shipping cost' },
+      { name: 'shippingCost', description: 'Shipping cost (deprecated, use deliveryCost)' },
+      { name: 'deliveryCost', description: 'Delivery cost' },
       { name: 'feedbackLink', description: 'Feedback link (for delivered orders)' },
       { name: 'supportPhone', description: 'Support phone number' },
       { name: 'trackingLink', description: 'Order tracking link' },

@@ -14,10 +14,14 @@ export class CreateEmployeeProfileDto {
   @IsNotEmpty()
   position: string;
 
+  @IsString()
+  @IsOptional()
+  bio?: string;
+
   @IsDateString()
   @IsNotEmpty()
   hireDate: Date;
- 
+
 
   @IsEnum(EmployeeStatus)
   @IsNotEmpty()

@@ -95,6 +95,57 @@ export class AuthController {
   }
 
   /**
+   * Get Admin and Staff users for todo assignment
+   * 
+   * @description Returns a list of all active admin and staff users (excluding affiliate marketers)
+   * for populating user dropdowns in todo assignment forms. This endpoint is restricted to
+   * ADMIN and STAFF roles only.
+   * 
+   * @route GET /auth/users/admin-staff
+   * @access Private (Admin, Staff)
+   * 
+   * @returns {User[]} Array of User objects (without password) containing:
+   *   - id: User ID
+   *   - name: User name
+   *   - emailAddress: Email address
+   *   - phoneNumber: Phone number
+   *   - role: User role (ADMIN or STAFF)
+   *   - isActive: Active status (always true)
+   *   - Other user fields (excluding password and resetPasswordToken)
+   * 
+   * @example Response:
+   * [
+   *   {
+   *     "id": 1,
+   *     "name": "John Admin",
+   *     "emailAddress": "admin@example.com",
+   *     "phoneNumber": "+975-17123456",
+   *     "role": "ADMIN",
+   *     "isActive": true,
+   *     ...
+   *   },
+   *   {
+   *     "id": 2,
+   *     "name": "Jane Staff",
+   *     "emailAddress": "staff@example.com",
+   *     "phoneNumber": "+975-17123457",
+   *     "role": "STAFF",
+   *     "isActive": true,
+   *     ...
+   *   }
+   * ]
+   * 
+   * @throws {401} Unauthorized - If user is not authenticated
+   * @throws {403} Forbidden - If user is not ADMIN or STAFF
+   */
+  @Get('users/admin-staff')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  async getAdminAndStaffUsers(): Promise<User[]> {
+    return this.authService.getAdminAndStaffUsers();
+  }
+
+  /**
    * 6. Update User (update admin, staff or affiliate marketer using one endpoint - update all fields) - Admin Only
    */
   @Put('users/:id')

@@ -331,6 +331,25 @@ export class AuthService {
   }
 
   /**
+   * Get Admin and Staff users for todo assignment - Admin and Staff only
+   * Returns all active admin and staff users (excludes affiliate marketers)
+   */
+  async getAdminAndStaffUsers(): Promise<User[]> {
+    const users = await this.userRepository.findAll({
+      where: {
+        role: {
+          [Op.in]: [UserRole.ADMIN, UserRole.STAFF],
+        },
+        isActive: true,
+      },
+      attributes: { exclude: ['password', 'resetPasswordToken'] },
+      order: [['name', 'ASC']],
+    });
+
+    return users.map((user) => user.toJSON());
+  }
+
+  /**
    * 4. Get All Users paginated by role - Admin Only
    */
   async getAllUsersPaginated(queryDto: GetUsersQueryDto) {

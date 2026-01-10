@@ -26,5 +26,42 @@ export class EmployeeProfileController {
     return this.employeeProfileService.update(+id, data);
   }
 
+  /**
+   * Get all staff for public page display
+   * 
+   * @description Returns a list of all active staff members with their employee profiles
+   * for display on a public page. This is a public endpoint (no authentication required).
+   * Only returns: name, department, position, and bio.
+   * 
+   * @route GET /employee-profile/public/staff
+   * @access Public
+   * 
+   * @returns {Array} Array of staff objects containing:
+   *   - name: Staff member's name
+   *   - department: Department name
+   *   - position: Position/title
+   *   - bio: Staff member's bio
+   * 
+   * @example Response:
+   * [
+   *   {
+   *     "name": "John Doe",
+   *     "department": "Engineering",
+   *     "position": "Senior Developer",
+   *     "bio": "John is a passionate developer with 10 years of experience..."
+   *   },
+   *   {
+   *     "name": "Jane Smith",
+   *     "department": "Design",
+   *     "position": "Lead Designer",
+   *     "bio": "Jane specializes in user experience and interface design..."
+   *   }
+   * ]
+   */
+  @Get('public/staff')
+  async getPublicStaffList() {
+    return this.employeeProfileService.getPublicStaffList();
+  }
+
   
 }

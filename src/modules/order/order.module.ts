@@ -19,6 +19,7 @@ import { SmsModule } from '../external/sms/sms.module';
 import { OrderSchedulerService } from './services/order-scheduler.service';
 import { SmsTemplateModule } from '../sms-template/sms-template.module';
 import { DiscountModule } from '../discount/discount.module';
+import { PaginationModule } from '../../common/pagination/pagination.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { DiscountModule } from '../discount/discount.module';
     SmsModule,
     SmsTemplateModule,
     DiscountModule,
+    PaginationModule,
   ],
   controllers: [OrderController],
   providers: [

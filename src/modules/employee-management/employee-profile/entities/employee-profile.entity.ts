@@ -42,6 +42,12 @@ export class EmployeeProfile extends Model<EmployeeProfile> {
   position: string;
 
   @Column({
+    type: DataType.TEXT,
+    allowNull: true,
+  })
+  bio: string;
+
+  @Column({
     type: DataType.DATE,
     allowNull: true,
   })

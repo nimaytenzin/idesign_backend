@@ -57,8 +57,8 @@ export class PaymentSettlementService {
    */
   private generatePaymentDescription(order: any): string {
     const orderNumber = order.orderNumber || `Order #${order.id}`;
-    const orderDate = order.orderDate
-      ? new Date(order.orderDate).toLocaleDateString()
+    const orderDate = order.placedAt
+      ? new Date(order.placedAt).toLocaleDateString()
       : 'Unknown Date';
 
     // Get product names

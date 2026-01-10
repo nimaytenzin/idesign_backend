@@ -25,10 +25,11 @@ import {
   OrderSource,
 } from './order.enums';
 
- 
-
 @Table
 export class Order extends Model<Order> {
+  // ============================================
+  // Basic Information
+  // ============================================
   @PrimaryKey
   @AutoIncrement
   @Column(DataType.INTEGER)
@@ -48,13 +49,9 @@ export class Order extends Model<Order> {
   })
   customerId: number;
 
-  @Column({
-    type: DataType.DATE,
-    allowNull: false,
-    defaultValue: DataType.NOW,
-  })
-  orderDate: Date;
-
+  // ============================================
+  // Order Classification
+  // ============================================
   @Column({
     type: DataType.ENUM(...Object.values(OrderSource)),
     allowNull: false,
@@ -69,22 +66,22 @@ export class Order extends Model<Order> {
   })
   fulfillmentStatus: FulfillmentStatus;
 
-   // 1. How the customer receives the order
-   @Column({
+  @Column({
     type: DataType.ENUM(...Object.values(FulfillmentType)),
     allowNull: false,
     defaultValue: FulfillmentType.DELIVERY,
   })
   fulfillmentType: FulfillmentType;
-  
+
+  // ============================================
+  // Financial Information
+  // ============================================
   @Column({
     type: DataType.DECIMAL(10, 2),
     allowNull: false,
     defaultValue: 0,
   })
-  totalAmount: number;
-
-  
+  subTotal: number;
 
   @Default(0)
   @Column({
@@ -92,7 +89,22 @@ export class Order extends Model<Order> {
     allowNull: false,
     defaultValue: 0,
   })
-  orderDiscount: number;
+  discount: number;
+
+  @Column({
+    type: DataType.DECIMAL(10, 2),
+    allowNull: false,
+    defaultValue: 0,
+  })
+  totalPayable: number;
+
+  @Default(0)
+  @Column({
+    type: DataType.DECIMAL(10, 2),
+    allowNull: false,
+    defaultValue: 0,
+  })
+  deliveryCost: number;
 
   @Column({
     type: DataType.STRING,
@@ -100,22 +112,9 @@ export class Order extends Model<Order> {
   })
   voucherCode: string;
 
-  @Column({
-    type: DataType.STRING,
-    allowNull: true,
-    unique: true,
-  })
-  feedbackToken: string;
-
-  @Column({
-    type: DataType.DATE,
-    allowNull: true,
-  })
-  lastUpdated: Date;
-
-
-
-  // Fulfillment status timestamps
+  // ============================================
+  // Fulfillment Timestamps
+  // ============================================
   @Column({
     type: DataType.DATE,
     allowNull: true,
@@ -152,24 +151,34 @@ export class Order extends Model<Order> {
   })
   canceledAt: Date;
 
-  // Delivery driver information (for SHIPPING status)
+  // ============================================
+  // Delivery Information
+  // ============================================
+  @ForeignKey(() => DeliveryRate)
+  @Column({
+    type: DataType.INTEGER,
+    allowNull: true, // Null if PICKUP or INSTORE
+  })
+  deliveryRateId: number;
 
-   // 2. Link to the specific rate applied (Optional but recommended for auditing)
-   @ForeignKey(() => DeliveryRate)
-   @Column({
-     type: DataType.INTEGER,
-     allowNull: true, // Null if PICKUP or INSTORE
-   })
-   deliveryRateId: number;
- 
-   // 3. Captured address if DELIVERY is selected
-   @Column({
-     type: DataType.TEXT,
-     allowNull: true,
-   })
-   shippingAddress: string;
+  @Column({
+    type: DataType.STRING,
+    allowNull: true, // Snapshotted from DeliveryLocation.name
+  })
+  deliveryLocation: string;
 
-  // Delivery driver information
+  @Column({
+    type: DataType.STRING,
+    allowNull: true, // Snapshotted from DeliveryRate.transportMode
+  })
+  deliveryMode: string;
+
+  @Column({
+    type: DataType.TEXT,
+    allowNull: true,
+  })
+  shippingAddress: string;
+
   @Column({
     type: DataType.STRING,
     allowNull: true,
@@ -188,7 +197,15 @@ export class Order extends Model<Order> {
   })
   vehicleNumber: string;
 
-  //payment details
+  @Column({
+    type: DataType.DATE,
+    allowNull: true,
+  })
+  expectedDeliveryDate: Date;
+
+  // ============================================
+  // Payment Information
+  // ============================================
   @Column({
     type: DataType.ENUM(...Object.values(PaymentStatus)),
     allowNull: false,
@@ -197,16 +214,16 @@ export class Order extends Model<Order> {
   paymentStatus: PaymentStatus;
 
   @Column({
-    type: DataType.DATE,
-    allowNull: true,
-  })
-  paymentDate: Date;
-
-  @Column({
     type: DataType.ENUM(...Object.values(PaymentMethod)),
     allowNull: true,
   })
   paymentMethod: PaymentMethod;
+
+  @Column({
+    type: DataType.DATE,
+    allowNull: true,
+  })
+  paidAt: Date;
 
   @Default(false)
   @Column({
@@ -223,17 +240,32 @@ export class Order extends Model<Order> {
   })
   receiptNumber: string;
 
-  @Default(0)
+  // ============================================
+  // User References
+  // ============================================
+  @ForeignKey(() => User)
   @Column({
-    type: DataType.DECIMAL(10, 2),
-    allowNull: false,
-    defaultValue: 0,
+    type: DataType.INTEGER,
+    allowNull: true,
   })
-  shippingCost: number;
+  affiliateId: number;
 
- 
+  @ForeignKey(() => User)
+  @Column({
+    type: DataType.INTEGER,
+    allowNull: true,
+  })
+  servedBy: number;
 
- 
+  // ============================================
+  // Additional Information
+  // ============================================
+  @Column({
+    type: DataType.STRING,
+    allowNull: true,
+    unique: true,
+  })
+  feedbackToken: string;
 
   @Column({
     type: DataType.TEXT,
@@ -242,29 +274,19 @@ export class Order extends Model<Order> {
   internalNotes: string;
 
   @Column({
-    type: DataType.DATE,
-    allowNull: true,
-  })
-  paidAt: Date;
-
-  @Column({
     type: DataType.STRING,
     allowNull: true,
   })
   referrerSource: string;
 
-  @ForeignKey(() => User)
-  @Column({
-    type: DataType.INTEGER,
-    allowNull: true,
-  })
-  affiliateId: number;
-
+  // ============================================
+  // Relationships
+  // ============================================
   @BelongsTo(() => Customer)
   customer: Customer;
 
-  @BelongsTo(() => User)
-  affiliate: User;
+  @BelongsTo(() => User, 'servedBy')
+  servedByUser: User;
 
   @BelongsTo(() => DeliveryRate)
   deliveryRate: DeliveryRate;
@@ -281,4 +303,3 @@ export class Order extends Model<Order> {
   @HasMany(() => AffiliateCommission)
   affiliateCommissions: AffiliateCommission[];
 }
-

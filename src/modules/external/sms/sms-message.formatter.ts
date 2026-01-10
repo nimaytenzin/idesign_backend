@@ -28,7 +28,7 @@ export class SmsMessageFormatter {
   formatOrderConfirmation(order: any): string {
     try {
       const orderNumber = order.orderNumber || `Order #${order.id}`;
-      const totalAmount = order.totalAmount || 0;
+      const totalAmount = order.totalPayable || 0;
 
       // Simple, compact message
       const message = `Thank you for placing your order with us. Your order ID is ${orderNumber} and amount is BTN ${totalAmount.toFixed(2)}.`;

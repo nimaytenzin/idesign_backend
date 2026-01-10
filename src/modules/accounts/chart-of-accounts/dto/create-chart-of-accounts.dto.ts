@@ -5,7 +5,7 @@ import {
   IsOptional,
   IsBoolean,
 } from 'class-validator';
-import { AccountType, NormalBalance } from '../entities/chart-of-accounts.entity';
+import { AccountType, AccountSubType, NormalBalance } from '../entities/chart-of-accounts.entity';
 
 export class CreateChartOfAccountsDto {
   @IsString()
@@ -19,6 +19,10 @@ export class CreateChartOfAccountsDto {
   @IsEnum(AccountType)
   @IsNotEmpty()
   accountType: AccountType;
+
+  @IsEnum(AccountSubType)
+  @IsOptional()
+  accountSubType?: AccountSubType;
 
   @IsEnum(NormalBalance)
   @IsNotEmpty()

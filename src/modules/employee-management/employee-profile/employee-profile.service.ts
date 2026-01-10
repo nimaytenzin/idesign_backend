@@ -3,9 +3,10 @@ import {
   Inject,
 } from '@nestjs/common';
 import { EmployeeProfile } from './entities/employee-profile.entity';
-import { User } from 'src/modules/auth/entities/user.entity';
+import { User, UserRole } from 'src/modules/auth/entities/user.entity';
 import { CreateEmployeeProfileDto } from './dto/create-employee-profile.dto';
 import { UpdateEmployeeProfileDto } from './dto/update-employee-profile.dto';
+import { Op } from 'sequelize';
 
 @Injectable()
 export class EmployeeProfileService {
@@ -26,5 +27,24 @@ export class EmployeeProfileService {
     return this.employeeProfileRepository.update(data, { where: { id } });
   }
 
+  /**
+   * Get all staff with their employee profiles for public display
+   * Returns only: name, department, position, and bio
+   */
+  async getPublicStaffList() {
+    return await this.userRepository.findAll({
+      where: {
+        role: UserRole.STAFF,
+        isActive: true,
+      },
+      attributes: ['id', 'name', 'profileImageUrl'],
+      include: [
+        {
+          model: EmployeeProfile,
+          attributes: ['department', 'position', 'bio'],
+        },
+      ],
+    });
+  }
 
 }

@@ -49,6 +49,13 @@ export class User extends Model<User> {
   })
   phoneNumber: string;
 
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: true,
+  })
+  tpnNumber: string;
+
   @Column({
     type: DataType.STRING,
     allowNull: false,

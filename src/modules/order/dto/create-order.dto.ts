@@ -7,34 +7,46 @@ import {
   ValidateNested,
   IsEnum,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateOrderItemDto } from './create-order-item.dto';
 import { CustomerDetailsDto } from '../../customer/dto/customer-details.dto';
-import { PaymentMethod, OrderSource } from '../entities/order.enums';
+import { PaymentMethod, OrderSource, FulfillmentType } from '../entities/order.enums';
 
 export class CreateOrderDto {
+  // Customer Information
   @ValidateNested()
   @Type(() => CustomerDetailsDto)
+  @IsNotEmpty()
   customer: CustomerDetailsDto;
 
+  // Order Items
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateOrderItemDto)
+  @IsNotEmpty()
   orderItems: CreateOrderItemDto[];
 
+  // Order Classification
   @IsEnum(OrderSource)
   @IsOptional()
   orderSource?: OrderSource;
 
+  @IsEnum(FulfillmentType)
+  @IsOptional()
+  fulfillmentType?: FulfillmentType;
+
+  // Payment Information
   @IsEnum(PaymentMethod)
   @IsOptional()
   paymentMethod?: PaymentMethod;
 
+  // Financial Information
   @IsNumber()
   @IsOptional()
   @Min(0)
-  orderDiscount?: number;
+  discount?: number;
 
   @IsString()
   @IsOptional()
@@ -43,8 +55,20 @@ export class CreateOrderDto {
   @IsNumber()
   @IsOptional()
   @Min(0)
-  shippingCost?: number;
+  deliveryCost?: number;
 
+  // Delivery Information
+  @ValidateIf((o) => o.fulfillmentType === FulfillmentType.DELIVERY)
+  @IsNumber()
+  @IsNotEmpty({ message: 'deliveryRateId is required when fulfillmentType is DELIVERY' })
+  deliveryRateId?: number;
+
+  @ValidateIf((o) => o.fulfillmentType === FulfillmentType.DELIVERY)
+  @IsString()
+  @IsNotEmpty({ message: 'shippingAddress is required when fulfillmentType is DELIVERY' })
+  shippingAddress?: string;
+
+  // Additional Information
   @IsString()
   @IsOptional()
   internalNotes?: string;
@@ -52,5 +76,10 @@ export class CreateOrderDto {
   @IsString()
   @IsOptional()
   referrerSource?: string;
+
+  // User References
+  @IsNumber()
+  @IsOptional()
+  servedBy?: number;
 }
 
