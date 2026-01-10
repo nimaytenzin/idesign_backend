@@ -10,10 +10,7 @@ import {
 } from 'sequelize-typescript';
 import { Product } from './product.entity';
 
-@Table({
-  tableName: 'product_images',
-  timestamps: true,
-})
+@Table
 export class ProductImage extends Model<ProductImage> {
   @PrimaryKey
   @AutoIncrement

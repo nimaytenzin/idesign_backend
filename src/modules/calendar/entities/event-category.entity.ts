@@ -11,7 +11,7 @@ import {
 } from 'sequelize-typescript';
 import { Event } from './event.entity';
 
-@Table({ tableName: 'event_categories' })
+@Table
 export class EventCategory extends Model<EventCategory> {
   @PrimaryKey
   @AutoIncrement

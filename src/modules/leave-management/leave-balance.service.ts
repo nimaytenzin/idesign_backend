@@ -4,9 +4,11 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
+import { Inject } from '@nestjs/common';
 import { LeaveBalance } from './entities/leave-balance.entity';
 import { LeaveType } from './entities/leave-type.entity';
-import { User } from '../auth/entities/user.entity';
+import { User, UserRole } from '../auth/entities/user.entity';
+import { EmployeeProfile } from '../employee-management/employee-profile/entities/employee-profile.entity';
 import { LeaveBalanceQueryDto } from './dto/leave-balance-query.dto';
 
 @Injectable()
@@ -18,6 +20,8 @@ export class LeaveBalanceService {
     private leaveTypeModel: typeof LeaveType,
     @InjectModel(User)
     private userModel: typeof User,
+    @Inject('EMPLOYEE_PROFILE_REPOSITORY')
+    private employeeProfileModel: typeof EmployeeProfile,
   ) {}
 
   async getBalance(
@@ -179,11 +183,22 @@ export class LeaveBalanceService {
    * This should be called at the start of each calendar year
    */
   async initializeYearBalances(year: number): Promise<void> {
+    // Get all active staff users by joining with EmployeeProfile
     const users = await this.userModel.findAll({
       where: {
-        role: 'EMPLOYEE',
-        employeeStatus: 'ACTIVE',
+        role: UserRole.STAFF,
+        isActive: true,
       },
+      include: [
+        {
+          model: EmployeeProfile,
+          as: 'employeeProfile',
+          where: {
+            employeeStatus: 'ACTIVE',
+          },
+          required: true, // Inner join - only users with active employee profiles
+        },
+      ],
     });
 
     const leaveTypes = await this.leaveTypeModel.findAll({

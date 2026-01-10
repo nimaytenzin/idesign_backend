@@ -14,10 +14,7 @@ import { ProductSubCategory } from '../../product-sub-category/entities/product-
 import { ProductImage } from './product-image.entity';
 import { DiscountProduct } from '../../discount/entities/discount-product.entity';
 
-@Table({
-  tableName: 'products',
-  timestamps: true,
-})
+@Table
 export class Product extends Model<Product> {
   @PrimaryKey
   @AutoIncrement

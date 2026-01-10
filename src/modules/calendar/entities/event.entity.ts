@@ -15,7 +15,7 @@ import { EventType } from './event-type.entity';
 import { EventCategory } from './event-category.entity';
 import { User } from '../../auth/entities/user.entity';
 
-@Table({ tableName: 'events' })
+@Table
 export class Event extends Model<Event> {
   @PrimaryKey
   @AutoIncrement

@@ -8,9 +8,7 @@ import {
   Default,
 } from 'sequelize-typescript';
 
-@Table({
-  timestamps: true,
-})
+@Table
 export class HeroSlide extends Model<HeroSlide> {
   @PrimaryKey
   @AutoIncrement

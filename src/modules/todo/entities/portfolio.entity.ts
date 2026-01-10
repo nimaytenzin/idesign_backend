@@ -11,7 +11,7 @@ import {
 } from 'sequelize-typescript';
 import { Todo } from './todo.entity';
 
-@Table({ tableName: 'portfolios' })
+@Table
 export class Portfolio extends Model<Portfolio> {
   @PrimaryKey
   @AutoIncrement

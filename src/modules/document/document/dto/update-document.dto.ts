@@ -4,9 +4,11 @@ import {
   IsNumber,
   Min,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class UpdateDocumentDto {
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   subCategoryId?: number;
 
@@ -23,6 +25,7 @@ export class UpdateDocumentDto {
   fileUrl?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   fileSize?: number;
@@ -32,6 +35,7 @@ export class UpdateDocumentDto {
   fileType?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
   versionNumber?: number;

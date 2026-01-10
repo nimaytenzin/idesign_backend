@@ -27,8 +27,13 @@ export enum PaymentMethod {
   ZPSS = 'ZPSS',
 }
 
-export enum OrderType {
+export enum OrderSource {
   COUNTER = 'COUNTER',
   ONLINE = 'ONLINE',
 }
 
+export enum FulfillmentType {
+  DELIVERY = 'DELIVERY',
+  PICKUP = 'PICKUP',
+  INSTORE = 'INSTORE',
+}

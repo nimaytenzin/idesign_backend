@@ -30,7 +30,7 @@ export enum DiscountScope {
   ORDER_TOTAL = 'ORDER_TOTAL', // Apply to order subtotal
 }
 
-@Table({ tableName: 'discounts' })
+@Table
 export class Discount extends Model<Discount> {
   @PrimaryKey
   @AutoIncrement

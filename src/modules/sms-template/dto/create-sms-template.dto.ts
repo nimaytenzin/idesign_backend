@@ -9,7 +9,7 @@ import {
   Max,
 } from 'class-validator';
 import { SmsTriggerEvent } from '../entities/sms-template.entity';
-import { OrderType } from '../../order/entities/order.enums';
+import { OrderSource } from '../../order/entities/order.enums';
 
 export class CreateSmsTemplateDto {
   @IsString()
@@ -39,9 +39,9 @@ export class CreateSmsTemplateDto {
   @IsOptional()
   sendDelay?: number;
 
-  @IsEnum(OrderType)
+  @IsEnum(OrderSource)
   @IsOptional()
-  orderType?: OrderType | null;
+  orderSource?: OrderSource | null;
 
   @IsNumber()
   @IsOptional()

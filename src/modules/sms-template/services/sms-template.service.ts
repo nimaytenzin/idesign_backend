@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { SmsTemplate, SmsTriggerEvent } from '../entities/sms-template.entity';
 import { Order } from '../../order/entities/order.entity';
-import { OrderType } from '../../order/entities/order.enums';
+import { OrderSource } from '../../order/entities/order.enums';
 import { CreateSmsTemplateDto } from '../dto/create-sms-template.dto';
 import { UpdateSmsTemplateDto } from '../dto/update-sms-template.dto';
 import { SmsTemplateQueryDto } from '../dto/sms-template-query.dto';
@@ -29,7 +29,7 @@ export class SmsTemplateService {
       isActive: createDto.isActive ?? true,
       sendCount: createDto.sendCount ?? 1,
       sendDelay: createDto.sendDelay ?? 0,
-      orderType: createDto.orderType ?? null,
+      orderSource: createDto.orderSource ?? null,
       priority: createDto.priority ?? 0,
     });
   }
@@ -41,8 +41,8 @@ export class SmsTemplateService {
       where.triggerEvent = queryDto.triggerEvent;
     }
 
-    if (queryDto?.orderType !== undefined) {
-      where.orderType = queryDto.orderType;
+    if (queryDto?.orderSource !== undefined) {
+      where.orderSource = queryDto.orderSource;
     }
 
     if (queryDto?.isActive !== undefined) {
@@ -85,7 +85,7 @@ export class SmsTemplateService {
 
   async findActiveTemplatesByTrigger(
     triggerEvent: SmsTriggerEvent,
-    orderType?: OrderType,
+    orderSource?: OrderSource,
   ): Promise<SmsTemplate[]> {
     const where: any = {
       triggerEvent,
@@ -93,10 +93,10 @@ export class SmsTemplateService {
     };
 
     // Filter by orderType: null means applies to both, otherwise match specific type
-    if (orderType !== undefined && orderType !== null) {
+    if (orderSource !== undefined && orderSource !== null) {
       where[Op.or] = [
-        { orderType: null }, // Templates that apply to all order types
-        { orderType }, // Templates specific to this order type
+        { orderSource: null }, // Templates that apply to all order sources
+        { orderSource }, // Templates specific to this order source
       ];
     }
 
@@ -107,7 +107,7 @@ export class SmsTemplateService {
 
     // Debug logging
     this.logger.log(
-      `[Template Query] Finding templates for trigger: ${triggerEvent}, orderType: ${orderType || 'null'}`,
+      `[Template Query] Finding templates for trigger: ${triggerEvent}, orderSource: ${orderSource || 'null'}`,
     );
     this.logger.log(
       `[Template Query] Query where clause: ${JSON.stringify(where, null, 2)}`,
@@ -117,7 +117,7 @@ export class SmsTemplateService {
     );
     templates.forEach((template, index) => {
       this.logger.log(
-        `[Template Query] Template ${index + 1}: ID=${template.id}, Name="${template.name}", orderType=${template.orderType || 'null'}, priority=${template.priority}, isActive=${template.isActive}`,
+        `[Template Query] Template ${index + 1}: ID=${template.id}, Name="${template.name}", orderSource=${template.orderSource || 'null'}, priority=${template.priority}, isActive=${template.isActive}`,
       );
     });
 

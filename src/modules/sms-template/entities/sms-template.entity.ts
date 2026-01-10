@@ -9,7 +9,7 @@ import {
   CreatedAt,
   UpdatedAt,
 } from 'sequelize-typescript';
-import { OrderType } from '../../order/entities/order.enums';
+import { OrderSource } from '../../order/entities/order.enums';
 
 export enum SmsTriggerEvent {
   ORDER_PLACED = 'ORDER_PLACED',
@@ -22,7 +22,7 @@ export enum SmsTriggerEvent {
   COUNTER_PAYMENT_RECEIPT = 'COUNTER_PAYMENT_RECEIPT',
 }
 
-@Table({ tableName: 'sms_templates' })
+@Table
 export class SmsTemplate extends Model<SmsTemplate> {
   @PrimaryKey
   @AutoIncrement
@@ -54,10 +54,10 @@ export class SmsTemplate extends Model<SmsTemplate> {
   sendDelay: number;
 
   @Column({
-    type: DataType.ENUM(...Object.values(OrderType)),
+    type: DataType.ENUM(...Object.values(OrderSource)),
     allowNull: true,
   })
-  orderType: OrderType | null;
+  orderSource: OrderSource | null;
 
   @Default(0)
   @Column({ type: DataType.INTEGER, allowNull: false, defaultValue: 0 })

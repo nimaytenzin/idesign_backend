@@ -15,22 +15,17 @@ import { OrderDiscount } from './order-discount.entity';
 import { Transaction } from '../../accounts/transaction/entities/transaction.entity';
 import { Customer } from 'src/modules/customer/entities/customer.entity';
 import { User } from '../../auth/entities/user.entity';
-import { AffiliateCommission } from '../../affiliate/entities/affiliate-commission.entity';
+import { AffiliateCommission } from '../../affiliate-marketer-management/affiliate-commission/entities/affiliate-commission.entity';
+import { DeliveryRate } from '../../delivery/delivery-rate/entities/delivery-rate.entity';
 import {
   FulfillmentStatus,
   PaymentStatus,
-  AffiliatePaymentStatus,
   PaymentMethod,
-  OrderType,
+  FulfillmentType,
+  OrderSource,
 } from './order.enums';
 
-export {
-  FulfillmentStatus,
-  PaymentStatus,
-  AffiliatePaymentStatus,
-  PaymentMethod,
-  OrderType,
-} from './order.enums';
+ 
 
 @Table
 export class Order extends Model<Order> {
@@ -61,18 +56,35 @@ export class Order extends Model<Order> {
   orderDate: Date;
 
   @Column({
-    type: DataType.ENUM(...Object.values(OrderType)),
+    type: DataType.ENUM(...Object.values(OrderSource)),
     allowNull: false,
-    defaultValue: OrderType.ONLINE,
+    defaultValue: OrderSource.ONLINE,
   })
-  orderType: OrderType;
+  orderSource: OrderSource;
 
+  @Column({
+    type: DataType.ENUM(...Object.values(FulfillmentStatus)),
+    allowNull: false,
+    defaultValue: FulfillmentStatus.PLACED,
+  })
+  fulfillmentStatus: FulfillmentStatus;
+
+   // 1. How the customer receives the order
+   @Column({
+    type: DataType.ENUM(...Object.values(FulfillmentType)),
+    allowNull: false,
+    defaultValue: FulfillmentType.DELIVERY,
+  })
+  fulfillmentType: FulfillmentType;
+  
   @Column({
     type: DataType.DECIMAL(10, 2),
     allowNull: false,
     defaultValue: 0,
   })
   totalAmount: number;
+
+  
 
   @Default(0)
   @Column({
@@ -101,12 +113,7 @@ export class Order extends Model<Order> {
   })
   lastUpdated: Date;
 
-  @Column({
-    type: DataType.ENUM(...Object.values(FulfillmentStatus)),
-    allowNull: false,
-    defaultValue: FulfillmentStatus.PLACED,
-  })
-  fulfillmentStatus: FulfillmentStatus;
+
 
   // Fulfillment status timestamps
   @Column({
@@ -146,6 +153,23 @@ export class Order extends Model<Order> {
   canceledAt: Date;
 
   // Delivery driver information (for SHIPPING status)
+
+   // 2. Link to the specific rate applied (Optional but recommended for auditing)
+   @ForeignKey(() => DeliveryRate)
+   @Column({
+     type: DataType.INTEGER,
+     allowNull: true, // Null if PICKUP or INSTORE
+   })
+   deliveryRateId: number;
+ 
+   // 3. Captured address if DELIVERY is selected
+   @Column({
+     type: DataType.TEXT,
+     allowNull: true,
+   })
+   shippingAddress: string;
+
+  // Delivery driver information
   @Column({
     type: DataType.STRING,
     allowNull: true,
@@ -164,6 +188,7 @@ export class Order extends Model<Order> {
   })
   vehicleNumber: string;
 
+  //payment details
   @Column({
     type: DataType.ENUM(...Object.values(PaymentStatus)),
     allowNull: false,
@@ -206,6 +231,10 @@ export class Order extends Model<Order> {
   })
   shippingCost: number;
 
+ 
+
+ 
+
   @Column({
     type: DataType.TEXT,
     allowNull: true,
@@ -236,6 +265,9 @@ export class Order extends Model<Order> {
 
   @BelongsTo(() => User)
   affiliate: User;
+
+  @BelongsTo(() => DeliveryRate)
+  deliveryRate: DeliveryRate;
 
   @HasMany(() => OrderItem)
   orderItems: OrderItem[];

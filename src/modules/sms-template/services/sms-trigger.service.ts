@@ -1,7 +1,7 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Order } from '../../order/entities/order.entity';
-import { FulfillmentStatus, PaymentStatus, OrderType } from '../../order/entities/order.enums';
+import { FulfillmentStatus, PaymentStatus,OrderSource } from '../../order/entities/order.enums';
 import { SmsTemplate, SmsTriggerEvent } from '../entities/sms-template.entity';
 import { Outbox, OutboxEventType, OutboxStatus } from '../../outbox/entities/outbox.entity';
 import { SmsTemplateService } from './sms-template.service';
@@ -94,7 +94,7 @@ export class SmsTriggerService {
       `[SMS Trigger] Trigger Event: ${triggerEvent}`,
     );
     this.logger.log(
-      `[SMS Trigger] Order Type: ${order.orderType}`,
+      `[SMS Trigger] Order Source: ${order.orderSource}`,
     );
     this.logger.log(
       `[SMS Trigger] Additional Data: ${JSON.stringify(additionalData || {})}`,
@@ -126,16 +126,16 @@ export class SmsTriggerService {
 
     // Find active templates for this trigger
     this.logger.log(
-      `[SMS Trigger] Searching for templates with triggerEvent=${triggerEvent}, orderType=${order.orderType}...`,
+      `[SMS Trigger] Searching for templates with triggerEvent=${triggerEvent}, orderSource=${order.orderSource}...`,
     );
     const templates = await this.smsTemplateService.findActiveTemplatesByTrigger(
       triggerEvent,
-      order.orderType,
+      order.orderSource,
     );
 
     if (templates.length === 0) {
       this.logger.warn(
-        `[SMS Trigger] ⚠️  No active templates found for trigger ${triggerEvent} and orderType ${order.orderType}`,
+        `[SMS Trigger] ⚠️  No active templates found for trigger ${triggerEvent} and orderSource ${order.orderSource}`,
       );
       this.logger.warn(
         `[SMS Trigger] This means no SMS will be sent. Please create/activate a template for this event.`,

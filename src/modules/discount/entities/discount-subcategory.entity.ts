@@ -12,7 +12,6 @@ import { Discount } from './discount.entity';
 import { ProductSubCategory } from '../../product-sub-category/entities/product-sub-category.entity';
 
 @Table({ 
-  tableName: 'discount_subcategories',
   indexes: [
     {
       unique: true,

@@ -24,9 +24,7 @@ export enum OutboxStatus {
   FAILED = 'FAILED',
 }
 
-@Table({
-  tableName: 'outbox',
-})
+@Table
 export class Outbox extends Model<Outbox> {
   @PrimaryKey
   @AutoIncrement

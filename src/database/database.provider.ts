@@ -28,12 +28,16 @@ import { Outbox } from 'src/modules/outbox/entities/outbox.entity';
 import { Event } from 'src/modules/calendar/entities/event.entity';
 import { EventType } from 'src/modules/calendar/entities/event-type.entity';
 import { EventCategory } from 'src/modules/calendar/entities/event-category.entity';
-import { EmployeeEducation } from 'src/modules/employee-management/entities/employee-education.entity';
-import { EmployeeWorkExperience } from 'src/modules/employee-management/entities/employee-work-experience.entity';
-import { AffiliateCommission } from 'src/modules/affiliate/entities/affiliate-commission.entity';
+import { EmployeeProfile } from 'src/modules/employee-management/employee-profile/entities/employee-profile.entity';
+import { EmployeeEducation } from 'src/modules/employee-management/employee-education/entities/employee-education.entity';
+import { EmployeeWorkExperience } from 'src/modules/employee-management/employee-work-experience/entities/employee-work-experience.entity';
+import { AffiliateCommission } from 'src/modules/affiliate-marketer-management/affiliate-commission/entities/affiliate-commission.entity';
 import { DocumentCategory } from 'src/modules/document/document-category/entities/document-category.entity';
 import { DocumentSubCategory } from 'src/modules/document/document-sub-category/entities/document-sub-category.entity';
 import { Document } from 'src/modules/document/document/entities/document.entity';
+import { DeliveryRate } from 'src/modules/delivery/delivery-rate/entities/delivery-rate.entity';
+import { DeliveryLocation } from 'src/modules/delivery/delivery-location/entities/delivery-location.entity';
+import { AffiliateProfile } from 'src/modules/affiliate-marketer-management/affiliate-profile/entities/affiliate-profile.entity';
 
 export const databaseProviders = [
   {
@@ -73,6 +77,12 @@ export const databaseProviders = [
       const sequelize = new Sequelize(sequelizeConfig);
       sequelize.addModels([
         User,
+        EmployeeProfile,
+        EmployeeEducation,
+        EmployeeWorkExperience,
+
+        AffiliateProfile,
+        AffiliateCommission,
         ProductCategory,
         ProductSubCategory,
         Product,
@@ -94,12 +104,12 @@ export const databaseProviders = [
         Event,
         EventType,
         EventCategory,
-        EmployeeEducation,
-        EmployeeWorkExperience,
-        AffiliateCommission,
+       
         DocumentCategory,
         DocumentSubCategory,
         Document,
+        DeliveryRate,
+        DeliveryLocation,
       ]);
 
       await sequelize.sync();

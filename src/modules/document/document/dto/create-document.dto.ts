@@ -23,7 +23,7 @@ export class CreateDocumentDto {
   documentTitle: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
-  @Min(1)
   versionNumber?: number;
 }

@@ -10,21 +10,27 @@ import { LeaveType } from './entities/leave-type.entity';
 import { LeaveRequest } from './entities/leave-request.entity';
 import { LeaveBalance } from './entities/leave-balance.entity';
 import { User } from '../auth/entities/user.entity';
+import { EmployeeProfile } from '../employee-management/employee-profile/entities/employee-profile.entity';
 
 @Module({
   imports: [
-    SequelizeModule.forFeature([LeaveType, LeaveRequest, LeaveBalance, User]),
+    SequelizeModule.forFeature([LeaveType, LeaveRequest, LeaveBalance, User, EmployeeProfile]),
+  ],
+  providers: [
+    LeaveTypeService,
+    LeaveRequestService,
+    LeaveBalanceService,
+    {
+      provide: 'EMPLOYEE_PROFILE_REPOSITORY',
+      useValue: EmployeeProfile,
+    },
   ],
   controllers: [
     LeaveTypeController,
     LeaveRequestController,
     LeaveBalanceController,
   ],
-  providers: [
-    LeaveTypeService,
-    LeaveRequestService,
-    LeaveBalanceService,
-  ],
+ 
   exports: [
     LeaveTypeService,
     LeaveRequestService,

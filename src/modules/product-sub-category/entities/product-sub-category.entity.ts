@@ -10,10 +10,7 @@ import {
 } from 'sequelize-typescript';
 import { ProductCategory } from '../../product-category/entities/product-category.entity';
 
-@Table({
-  tableName: 'product_sub_categories',
-  timestamps: true,
-})
+@Table
 export class ProductSubCategory extends Model<ProductSubCategory> {
   @PrimaryKey
   @AutoIncrement

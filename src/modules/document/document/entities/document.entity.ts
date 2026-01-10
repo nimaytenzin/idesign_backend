@@ -11,10 +11,7 @@ import {
 import { DocumentSubCategory } from '../../document-sub-category/entities/document-sub-category.entity';
 import { User } from 'src/modules/auth/entities/user.entity';
 
-@Table({
-  tableName: 'documents',
-  timestamps: true,
-})
+@Table
 export class Document extends Model {
   @PrimaryKey
   @AutoIncrement

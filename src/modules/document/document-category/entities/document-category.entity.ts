@@ -9,10 +9,7 @@ import {
 } from 'sequelize-typescript';
 import { DocumentSubCategory } from '../../document-sub-category/entities/document-sub-category.entity';
 
-@Table({
-  tableName: 'document_categories',
-  timestamps: true,
-})
+@Table
 export class DocumentCategory extends Model {
   @PrimaryKey
   @AutoIncrement

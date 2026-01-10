@@ -19,9 +19,7 @@ export enum LeaveRequestStatus {
   CANCELLED = 'CANCELLED',
 }
 
-@Table({
-  timestamps: true,
-})
+@Table
 export class LeaveRequest extends Model<LeaveRequest> {
   @PrimaryKey
   @AutoIncrement

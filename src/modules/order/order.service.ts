@@ -9,7 +9,7 @@ import { Sequelize } from 'sequelize-typescript';
 import { Op } from 'sequelize';
 import { Customer } from '../customer/entities/customer.entity';
 import { Order } from './entities/order.entity';
-import { FulfillmentStatus, PaymentStatus, PaymentMethod, OrderType } from './entities/order.enums';
+import { FulfillmentStatus, PaymentStatus, PaymentMethod, OrderSource } from './entities/order.enums';
 import { OrderItem } from './entities/order-item.entity';
 import { OrderDiscount } from './entities/order-discount.entity';
 import { Product } from '../product/entities/product.entity';
@@ -38,8 +38,9 @@ import { SmsTriggerEvent } from '../sms-template/entities/sms-template.entity';
 import { DiscountCalculationService } from '../discount/services/discount-calculation.service';
 import { DiscountScope } from '../discount/entities/discount.entity';
 import { User, UserRole } from '../auth/entities/user.entity';
-import { AffiliateCommission } from '../affiliate/entities/affiliate-commission.entity';
+import { AffiliateCommission } from '../affiliate-marketer-management/affiliate-commission/entities/affiliate-commission.entity';
 import { v4 as uuidv4 } from 'uuid';
+import { AffiliateProfile } from '../affiliate-marketer-management/affiliate-profile/entities/affiliate-profile.entity';
 
 @Injectable()
 export class OrderService {
@@ -56,6 +57,8 @@ export class OrderService {
     private productModel: typeof Product,
     @InjectModel(User)
     private userModel: typeof User,
+    @InjectModel(AffiliateProfile)
+    private affiliateProfileModel: typeof AffiliateProfile,
     @InjectModel(AffiliateCommission)
     private affiliateCommissionModel: typeof AffiliateCommission,
     private readonly sequelize: Sequelize,
@@ -138,32 +141,40 @@ export class OrderService {
       return null;
     }
 
-    const affiliate = await this.userModel.findOne({
+    const affiliateProfile = await this.affiliateProfileModel.findOne({
       where: {
         voucherCode: voucherCode.trim().toUpperCase(),
-        role: UserRole.AFFILIATE_MARKETER,
-        isActive: true, // Only link to active affiliate marketers
       },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          where: {
+            role: UserRole.AFFILIATE_MARKETER,
+            isActive: true, // Only link to active affiliate marketers
+          },
+        },
+      ],
       transaction,
     });
 
-    if (!affiliate) {
+    if (!affiliateProfile || !affiliateProfile.user) {
       this.logger.debug(
         `[Affiliate Linking] No active affiliate marketer found for voucher code: ${voucherCode}`,
       );
       return null;
     }
 
-    const commissionPercentage = affiliate.commissionPercentage
-      ? parseFloat(affiliate.commissionPercentage.toString())
+    const commissionPercentage = affiliateProfile.commissionPercentage
+      ? parseFloat(affiliateProfile.commissionPercentage.toString())
       : 0;
 
     this.logger.log(
-      `[Affiliate Linking] Linked affiliate marketer ${affiliate.id} (${affiliate.name}) to order via voucher code: ${voucherCode}`,
+      `[Affiliate Linking] Linked affiliate marketer ${affiliateProfile.user.id} (${affiliateProfile.user.name}) to order via voucher code: ${voucherCode}`,
     );
 
     return {
-      affiliateId: affiliate.id,
+      affiliateId: affiliateProfile.user.id,
       commissionPercentage,
     };
   }
@@ -313,9 +324,9 @@ export class OrderService {
       const orderNumber = await this.generateOrderNumberInTransaction(transaction);
 
       // Determine order type and payment status
-      const orderType = createOrderDto.orderType || OrderType.ONLINE;
+      const orderSource = createOrderDto.orderSource || OrderSource.ONLINE;
       const paymentStatus =
-        orderType === OrderType.COUNTER && createOrderDto.paymentMethod
+        orderSource === OrderSource.COUNTER && createOrderDto.paymentMethod
           ? PaymentStatus.PAID
           : PaymentStatus.PENDING;
 
@@ -342,7 +353,7 @@ export class OrderService {
           customerId: customer.id,
           orderNumber,
           orderDate: now,
-          orderType,
+          orderSource: createOrderDto.orderSource,
           totalAmount,
           orderDiscount,
           voucherCode: createOrderDto.voucherCode,
@@ -468,15 +479,15 @@ export class OrderService {
 
       // Trigger SMS templates (after transaction commits - async, won't block)
       const triggerEvent =
-        orderType === OrderType.COUNTER
+        orderSource === OrderSource.COUNTER
           ? SmsTriggerEvent.COUNTER_PAYMENT_RECEIPT
           : SmsTriggerEvent.ORDER_PLACED;
 
       this.logger.log(
-        `[Order Created] Order ID: ${savedOrder.id}, Order Number: ${savedOrder.orderNumber}, Type: ${orderType}, Payment Status: ${paymentStatus}, Trigger Event: ${triggerEvent}`,
+        `[Order Created] Order ID: ${savedOrder.id}, Order Number: ${savedOrder.orderNumber}, Source: ${orderSource}, Payment Status: ${paymentStatus}, Trigger Event: ${triggerEvent}`,
       );
       this.logger.log(
-        `[SMS Trigger] Starting SMS template processing for order ${savedOrder.id} with trigger: ${triggerEvent}, orderType: ${orderType}`,
+        `[SMS Trigger] Starting SMS template processing for order ${savedOrder.id} with trigger: ${triggerEvent}, orderSource: ${orderSource}`,
       );
 
       // Process SMS templates asynchronously (fire and forget)

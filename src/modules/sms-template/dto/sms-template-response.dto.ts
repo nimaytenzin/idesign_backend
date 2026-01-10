@@ -1,5 +1,5 @@
 import { SmsTriggerEvent } from '../entities/sms-template.entity';
-import { OrderType } from '../../order/entities/order.enums';
+import { OrderSource } from '../../order/entities/order.enums';
 
 export class SmsTemplateResponseDto {
   id: number;
@@ -9,7 +9,7 @@ export class SmsTemplateResponseDto {
   isActive: boolean;
   sendCount: number;
   sendDelay: number;
-  orderType: OrderType | null;
+  orderSource: OrderSource | null;
   priority: number;
   createdAt: Date;
   updatedAt: Date;

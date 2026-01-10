@@ -11,9 +11,7 @@ import {
 import { LeaveRequest } from './leave-request.entity';
 import { LeaveBalance } from './leave-balance.entity';
 
-@Table({
-  timestamps: true,
-})
+@Table
 export class LeaveType extends Model<LeaveType> {
   @PrimaryKey
   @AutoIncrement

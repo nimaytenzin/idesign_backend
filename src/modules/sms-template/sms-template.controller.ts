@@ -105,7 +105,7 @@ export class SmsTemplateController {
       isActive: template.isActive,
       sendCount: template.sendCount,
       sendDelay: template.sendDelay,
-      orderType: template.orderType,
+      orderSource: template.orderSource,
       priority: template.priority,
       createdAt: template.createdAt,
       updatedAt: template.updatedAt,

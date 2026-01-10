@@ -12,7 +12,7 @@ import {
 import { Todo } from './todo.entity';
 import { User } from '../../auth/entities/user.entity';
 
-@Table({ tableName: 'todo_assignees' })
+@Table
 export class TodoAssignee extends Model<TodoAssignee> {
   @PrimaryKey
   @AutoIncrement

@@ -12,9 +12,7 @@ import {
 import { Order } from './order.entity';
 import { Product } from '../../product/entities/product.entity';
 
-@Table({
-  tableName: 'order_items',
-})
+@Table
 export class OrderItem extends Model<OrderItem> {
   @PrimaryKey
   @AutoIncrement

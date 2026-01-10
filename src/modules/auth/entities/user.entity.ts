@@ -1,6 +1,13 @@
-import { Column, DataType, Model, Table, HasMany, Default } from 'sequelize-typescript';
-import { EmployeeEducation } from '../../employee-management/entities/employee-education.entity';
-import { EmployeeWorkExperience } from '../../employee-management/entities/employee-work-experience.entity';
+import {
+  Column,
+  DataType,
+  Model,
+  Table,
+  HasOne,
+  Default,
+} from 'sequelize-typescript';
+import { EmployeeProfile } from '../../employee-management/employee-profile/entities/employee-profile.entity';
+import { AffiliateProfile } from '../../affiliate-marketer-management/affiliate-profile/entities/affiliate-profile.entity';
 
 export enum UserRole {
   ADMIN = 'ADMIN',
@@ -9,7 +16,7 @@ export enum UserRole {
 }
 
 @Table
-export class User extends Model {
+export class User extends Model<User> {
   @Column({
     primaryKey: true,
     autoIncrement: true,
@@ -49,6 +56,33 @@ export class User extends Model {
   password: string;
 
   @Column({
+    type: DataType.STRING,
+    allowNull: true,
+  })
+  currentAddress: string;
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: true,
+  })
+  permanentAddress: string;
+
+  @Column({
+    type: DataType.DATE,
+    allowNull: true,
+  })
+  dateOfBirth: Date;
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: true,
+  })
+  profileImageUrl: string;
+
+
+
+  //restrictive upate access for staff and affiliate marketer, only admin can update role and isActive
+  @Column({
     type: DataType.ENUM(...Object.values(UserRole)),
     allowNull: false,
     defaultValue: UserRole.STAFF,
@@ -63,84 +97,17 @@ export class User extends Model {
   })
   isActive: boolean;
 
-  // Employee fields (only relevant when role is EMPLOYEE)
-  @Column({
-    type: DataType.STRING,
-    allowNull: true,
-  })
-  employeeId: string;
+
 
   @Column({
     type: DataType.STRING,
     allowNull: true,
   })
-  department: string;
+  resetPasswordToken: string;
 
-  @Column({
-    type: DataType.STRING,
-    allowNull: true,
-  })
-  position: string;
+  @HasOne(() => EmployeeProfile)
+  employeeProfile: EmployeeProfile;
 
-  @Column({
-    type: DataType.DATE,
-    allowNull: true,
-  })
-  hireDate: Date;
-
-  @Column({
-    type: DataType.DATE,
-    allowNull: true,
-  })
-  terminationDate: Date;
-
-  @Column({
-    type: DataType.ENUM('ACTIVE', 'INACTIVE', 'TERMINATED'),
-    allowNull: true,
-  })
-  employeeStatus: string;
-
-  @Column({
-    type: DataType.STRING,
-    allowNull: true,
-  })
-  address: string;
-
-  @Column({
-    type: DataType.DATE,
-    allowNull: true,
-  })
-  dateOfBirth: Date;
-
-  @Column({
-    type: DataType.STRING,
-    allowNull: true,
-  })
-  profileImageUrl: string;
-
-  // Affiliate marketer fields (only relevant when role is AFFILIATE_MARKETER)
-  @Column({
-    type: DataType.STRING,
-    allowNull: true,
-    unique: true,
-  })
-  voucherCode: string;
-
-  @Column({
-    type: DataType.DECIMAL(5, 2),
-    allowNull: true,
-  })
-  discountPercentage: number;
-
-  @Column({
-    type: DataType.DECIMAL(5, 2),
-    allowNull: true,
-  })
-  commissionPercentage: number;
-
-  @HasMany(() => EmployeeEducation)
-  educations: EmployeeEducation[];
-
-  @HasMany(() => EmployeeWorkExperience)
-  workExperiences: EmployeeWorkExperience[];
+  @HasOne(() => AffiliateProfile)
+  affiliateProfile: AffiliateProfile;
 }

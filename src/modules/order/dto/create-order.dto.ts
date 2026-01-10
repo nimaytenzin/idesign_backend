@@ -11,7 +11,7 @@ import {
 import { Type } from 'class-transformer';
 import { CreateOrderItemDto } from './create-order-item.dto';
 import { CustomerDetailsDto } from '../../customer/dto/customer-details.dto';
-import { PaymentMethod, OrderType } from '../entities/order.enums';
+import { PaymentMethod, OrderSource } from '../entities/order.enums';
 
 export class CreateOrderDto {
   @ValidateNested()
@@ -23,9 +23,9 @@ export class CreateOrderDto {
   @Type(() => CreateOrderItemDto)
   orderItems: CreateOrderItemDto[];
 
-  @IsEnum(OrderType)
+  @IsEnum(OrderSource)
   @IsOptional()
-  orderType?: OrderType;
+  orderSource?: OrderSource;
 
   @IsEnum(PaymentMethod)
   @IsOptional()

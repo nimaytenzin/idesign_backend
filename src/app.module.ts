@@ -1,10 +1,8 @@
 import { Module } from '@nestjs/common';
-import { SequelizeModule } from '@nestjs/sequelize';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
-import { databaseConfig } from './database/database.config';
-import { DEVELOPMENT, PRODUCTION, TEST } from './constants/constants';
+import { PaginationModule } from './common/pagination/pagination.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ProductCategoryModule } from './modules/product-category/product-category.module';
 import { ProductSubCategoryModule } from './modules/product-sub-category/product-sub-category.module';
@@ -25,56 +23,22 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { CustomerModule } from './modules/customer/customer.module';
 import { DiscountModule } from './modules/discount/discount.module';
 import { OutboxModule } from './modules/outbox/outbox.module';
-import { EmployeeManagementModule } from './modules/employee-management/employee-management.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
 import { TodoModule } from './modules/todo/todo.module';
-import { AffiliateModule } from './modules/affiliate/affiliate.module';
 import { DocumentCategoryModule } from './modules/document/document-category/document-category.module';
 import { DocumentSubCategoryModule } from './modules/document/document-sub-category/document-sub-category.module';
 import { DocumentModule } from './modules/document/document/document.module';
-
-// Get database config based on environment
-function getDatabaseConfig() {
-  const env = process.env.NODE_ENV || DEVELOPMENT;
-  let config;
-
-  switch (env) {
-    case DEVELOPMENT:
-      config = databaseConfig.development;
-      break;
-    case TEST:
-      config = databaseConfig.test;
-      break;
-    case PRODUCTION:
-      config = databaseConfig.production;
-      break;
-    default:
-      config = databaseConfig.development;
-  }
-
-  // Remove password field if it's empty or undefined
-  const sequelizeConfig: any = {
-    dialect: (config.dialect as any) || 'mysql',
-    host: config.host || 'localhost',
-    port: config.port ? parseInt(String(config.port)) : 3306,
-    username: config.username || 'root',
-    database: config.database || 'idesign',
-    autoLoadModels: true,
-    synchronize: true,
-    logging: config.logging !== undefined ? config.logging : false,
-  };
-
-  // Only include password if it's not empty
-  if (config.password && config.password.trim() !== '') {
-    sequelizeConfig.password = config.password;
-  }
-
-  return sequelizeConfig;
-}
+import { DeliveryLocationModule } from './modules/delivery/delivery-location/delivery-location.module';
+import { DeliveryRateModule } from './modules/delivery/delivery-rate/delivery-rate.module';
+import { AffiliateProfileModule } from './modules/affiliate-marketer-management/affiliate-profile/affiliate-profile.module';
+import { AffiliateCommissionModule } from './modules/affiliate-marketer-management/affiliate-commission/affiliate-commission.module';
+import { EmployeeProfileModule } from './modules/employee-management/employee-profile/employee-profile.module';
+import { EmployeeWorkExperienceModule } from './modules/employee-management/employee-work-experience/employee-work-experience.module';
+import { EmployeeEducationModule } from './modules/employee-management/employee-education/employee-education.module';
 
 @Module({
   imports: [
-    SequelizeModule.forRoot(getDatabaseConfig()),
+    PaginationModule,
     DatabaseModule,
     AuthModule,
     ProductCategoryModule,
@@ -96,13 +60,19 @@ function getDatabaseConfig() {
     CustomerModule,
     DiscountModule,
     OutboxModule,
-    EmployeeManagementModule,
     CalendarModule,
     TodoModule,
-    AffiliateModule,
     DocumentCategoryModule,
     DocumentSubCategoryModule,
-    DocumentModule
+    DocumentModule,
+    DeliveryLocationModule,
+    DeliveryRateModule,
+    AffiliateProfileModule,
+    AffiliateCommissionModule,
+
+    EmployeeProfileModule,
+    EmployeeEducationModule,
+    EmployeeWorkExperienceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

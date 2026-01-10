@@ -20,10 +20,7 @@ export enum PaymentMethod {
   ZPSS = 'ZPSS',
 }
 
-@Table({
-  tableName: 'expenses',
-  timestamps: true,
-})
+@Table
 export class Expense extends Model<Expense> {
   @PrimaryKey
   @AutoIncrement

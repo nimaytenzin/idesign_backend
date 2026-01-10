@@ -21,7 +21,7 @@ export enum TodoStatus {
   COMPLETED = 'COMPLETED',
 }
 
-@Table({ tableName: 'todos' })
+@Table
 export class Todo extends Model<Todo> {
   @PrimaryKey
   @AutoIncrement
