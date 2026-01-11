@@ -24,7 +24,14 @@ export enum OutboxStatus {
   FAILED = 'FAILED',
 }
 
-@Table
+@Table({
+  indexes: [
+    { fields: ['eventType'], name: 'idx_outbox_event_type' },
+    { fields: ['orderId'], name: 'idx_outbox_order_id' },
+    { fields: ['scheduledFor'], name: 'idx_outbox_scheduled_for' },
+    { fields: ['status'], name: 'idx_outbox_status' },
+  ],
+})
 export class Outbox extends Model<Outbox> {
   @PrimaryKey
   @AutoIncrement
@@ -35,18 +42,15 @@ export class Outbox extends Model<Outbox> {
     type: DataType.ENUM(...Object.values(OutboxEventType)),
     allowNull: false,
   })
-  @Index
   eventType: OutboxEventType;
 
   @Column({ type: DataType.INTEGER, allowNull: false })
-  @Index
   orderId: number;
 
   @Column({ type: DataType.JSON, allowNull: false })
   payload: any; // SMS details, email content, etc.
 
   @Column({ type: DataType.DATE, allowNull: false })
-  @Index
   scheduledFor: Date; // When to process (for delayed SMS)
 
   @Column({
@@ -54,7 +58,6 @@ export class Outbox extends Model<Outbox> {
     allowNull: false,
     defaultValue: OutboxStatus.PENDING,
   })
-  @Index
   status: OutboxStatus;
 
   @Default(0)

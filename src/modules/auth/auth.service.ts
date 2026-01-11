@@ -367,14 +367,22 @@ export class AuthService {
      include:[
       {
         model: EmployeeProfile,
+        required: false,
         include: [
-          {model: EmployeeEducation},
-          {model: EmployeeWorkExperience}
+          {
+            model: EmployeeEducation,
+            required: false,
+          },
+          {
+            model: EmployeeWorkExperience,
+            required: false,
+          }
         ]
         
       },
       {
-        model:AffiliateProfile
+        model:AffiliateProfile,
+        required: false,
       }
      ], 
       order: [['createdAt', 'DESC']],
