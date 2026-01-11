@@ -180,6 +180,12 @@ export class Order extends Model<Order> {
   shippingAddress: string;
 
   @Column({
+    type: DataType.TEXT,
+    allowNull: true,
+  })
+  deliveryNotes: string;
+
+  @Column({
     type: DataType.STRING,
     allowNull: true,
   })

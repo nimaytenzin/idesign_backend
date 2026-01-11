@@ -212,6 +212,7 @@ export class TodoService {
       updateData.assignedDate = new Date(updateDto.assignedDate);
     if (updateDto.dueBy !== undefined) updateData.dueBy = updateDto.dueBy ? new Date(updateDto.dueBy) : null;
     if (updateDto.status !== undefined) updateData.status = updateDto.status;
+    if (updateDto.remarks !== undefined) updateData.remarks = updateDto.remarks;
 
     await todo.update(updateData);
 
@@ -234,6 +235,72 @@ export class TodoService {
     }
 
     return this.findOne(id);
+  }
+
+  async markAsComplete(id: number, remarks?: string): Promise<Todo> {
+    const todo = await this.findOne(id);
+
+    if (todo.status === TodoStatus.COMPLETED) {
+      throw new BadRequestException('Todo is already completed');
+    }
+
+    await todo.update({
+      status: TodoStatus.COMPLETED,
+      remarks: remarks ?? null,
+    });
+
+    return this.findOne(id);
+  }
+
+  async findCompletedThisWeekByUser(userId: number): Promise<Todo[]> {
+    // Calculate start of current week (Monday)
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert Sunday (0) to 6 days from Monday
+    
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - daysFromMonday);
+    weekStart.setHours(0, 0, 0, 0);
+    
+    // End of week (Sunday 23:59:59)
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    // Build include for assignedUsers
+    const assignedUsersInclude: any = {
+      model: User,
+      as: 'assignedUsers',
+      attributes: ['id', 'name', 'emailAddress'],
+      through: {
+        attributes: ['assignedAt'],
+      },
+      where: { id: userId },
+      required: true, // Use INNER JOIN to filter
+    };
+
+    return this.todoModel.findAll({
+      where: {
+        status: TodoStatus.COMPLETED,
+        updatedAt: {
+          [Op.between]: [weekStart, weekEnd],
+        },
+      },
+      include: [
+        {
+          model: Portfolio,
+          as: 'portfolio',
+          attributes: ['id', 'name'],
+        },
+        {
+          model: User,
+          as: 'createdBy',
+          attributes: ['id', 'name', 'emailAddress'],
+        },
+        assignedUsersInclude,
+      ],
+      order: [['updatedAt', 'DESC']],
+    });
   }
 
   async remove(id: number): Promise<void> {
@@ -383,6 +450,7 @@ export class TodoService {
       status: todo.status,
       assignedDate: todo.assignedDate,
       dueBy: todo.dueBy,
+      remarks: todo.remarks,
       portfolioId: todo.portfolioId,
       createdById: todo.createdById,
       createdAt: todo.createdAt,

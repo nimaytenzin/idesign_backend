@@ -18,7 +18,7 @@ export class EmployeeWorkExperienceService {
   ) {}
  
   async create(userId: number, createWorkExperienceDto: CreateEmployeeWorkExperienceDto) {
-    const employeeProfile = await this.employeeProfileRepository.findByPk(userId);
+    const employeeProfile = await this.employeeProfileRepository.findOne({ where: { userId } });
     if (!employeeProfile) {
       throw new NotFoundException('Employee profile not found');
     }
@@ -26,16 +26,13 @@ export class EmployeeWorkExperienceService {
   }
  
   async findAllByUserId(userId: number) {
-    const employeeProfile = await this.employeeProfileRepository.findByPk(userId);
-    if (!employeeProfile) {
-      throw new NotFoundException('Employee profile not found');
-    }
-    return this.workExperienceRepository.findAll({ where: { employeeProfileId: employeeProfile.id } });
+    const employeeProfile = await this.employeeProfileRepository.findOne({ where: { userId } });
+    return this.workExperienceRepository.findAll({ where: { employeeProfileId: employeeProfile?.id } });
   }
 
   
   async update(userId: number, id: number, updateWorkExperienceDto: UpdateEmployeeWorkExperienceDto) {
-    const employeeProfile = await this.employeeProfileRepository.findByPk(userId);
+    const employeeProfile = await this.employeeProfileRepository.findOne({ where: { userId } });
     if (!employeeProfile) {
       throw new NotFoundException('Employee profile not found');
     }
@@ -44,7 +41,7 @@ export class EmployeeWorkExperienceService {
  
 
   async remove(userId: number, id: number) {
-    const employeeProfile = await this.employeeProfileRepository.findByPk(userId);
+    const employeeProfile = await this.employeeProfileRepository.findOne({ where: { userId } });
     if (!employeeProfile) {
       throw new NotFoundException('Employee profile not found');
     }

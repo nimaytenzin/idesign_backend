@@ -757,6 +757,7 @@ export class OrderService {
           deliveryLocation,
           deliveryMode,
           shippingAddress: createOrderDto.shippingAddress || null,
+          deliveryNotes: createOrderDto.deliveryNotes || null,
           expectedDeliveryDate: null, // Not required for counter orders
           internalNotes: createOrderDto.internalNotes,
           referrerSource: createOrderDto.referrerSource || null,
@@ -1122,6 +1123,10 @@ export class OrderService {
 
     if (updateOrderDto.internalNotes !== undefined) {
       await order.update({ internalNotes: updateOrderDto.internalNotes });
+    }
+
+    if (updateOrderDto.deliveryNotes !== undefined) {
+      await order.update({ deliveryNotes: updateOrderDto.deliveryNotes });
     }
 
     // Handle voucher code update and affiliate linking
@@ -1866,7 +1871,9 @@ export class OrderService {
         updateData.driverPhone = shipOrderDto.driverPhone;
       }
 
-     
+      if (shipOrderDto.deliveryNotes !== undefined) {
+        updateData.deliveryNotes = shipOrderDto.deliveryNotes;
+      }
 
       await order.update(updateData, { transaction });
 

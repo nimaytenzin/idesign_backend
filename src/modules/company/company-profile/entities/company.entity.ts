@@ -81,6 +81,18 @@ export class Company extends Model<Company> {
   country: string;
 
   @Column({
+    type: DataType.DOUBLE,
+    allowNull: false,
+  })
+  lat: number;
+
+  @Column({
+    type: DataType.DOUBLE,
+    allowNull: false,
+  })
+  long: number;
+
+  @Column({
     type: DataType.STRING(500),
     allowNull: true,
   })
@@ -121,6 +133,18 @@ export class Company extends Model<Company> {
     allowNull: true,
   })
   description: string;
+
+  @Column({
+    type: DataType.TEXT,
+    allowNull: true,
+  })
+  vision: string;
+
+  @Column({
+    type: DataType.TEXT,
+    allowNull: true,
+  })
+  mission: string;
 
   @Column({
     type: DataType.STRING,

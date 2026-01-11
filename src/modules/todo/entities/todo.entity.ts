@@ -60,6 +60,12 @@ export class Todo extends Model<Todo> {
   })
   dueBy: Date;
 
+  @Column({
+    type: DataType.TEXT,
+    allowNull: true,
+  })
+  remarks: string;
+
   @ForeignKey(() => Portfolio)
   @Column({
     type: DataType.INTEGER,

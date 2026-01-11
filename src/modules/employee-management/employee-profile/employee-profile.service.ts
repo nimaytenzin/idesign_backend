@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  NotFoundException,
 } from '@nestjs/common';
 import { EmployeeProfile } from './entities/employee-profile.entity';
 import { User, UserRole } from 'src/modules/auth/entities/user.entity';
@@ -47,4 +48,39 @@ export class EmployeeProfileService {
     });
   }
 
+  /**
+   * Get employee profile by user ID
+   * @param userId - The user ID to get employee profile for
+   * @returns Employee profile with user information
+   */
+  async getEmployeeProfileByUserId(userId: number) {
+    const employeeProfile = await this.employeeProfileRepository.findOne({
+      where: { userId },
+      include: [
+        {
+          model: User,
+          attributes: [
+            'id',
+            'name',
+            'emailAddress',
+            'phoneNumber',
+            'currentAddress',
+            'permanentAddress',
+            'dateOfBirth',
+            'profileImageUrl',
+            'role',
+            'isActive',
+          ],
+        },
+      ],
+    });
+
+    if (!employeeProfile) {
+      throw new NotFoundException(
+        `Employee profile not found for user with ID ${userId}`,
+      );
+    }
+
+    return employeeProfile;
+  }
 }

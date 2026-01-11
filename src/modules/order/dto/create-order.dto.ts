@@ -68,6 +68,10 @@ export class CreateOrderDto {
   @IsNotEmpty({ message: 'shippingAddress is required when fulfillmentType is DELIVERY' })
   shippingAddress?: string;
 
+  @IsString()
+  @IsOptional()
+  deliveryNotes?: string;
+
   // Additional Information
   @IsString()
   @IsOptional()

@@ -26,5 +26,7 @@ export class ShipOrderDto {
   @IsNotEmpty()
   expectedDeliveryDate: string;
 
-
+  @IsString()
+  @IsOptional()
+  deliveryNotes?: string;
 }

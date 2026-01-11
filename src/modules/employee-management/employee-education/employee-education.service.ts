@@ -24,11 +24,8 @@ export class EmployeeEducationService {
   //   return this.employeeEducationService.create(+userId, createEducationDto);
   // }
   async create(userId: number, createEducationDto: CreateEmployeeEducationDto) {
-    const employeeProfile = await this.employeeProfileRepository.findByPk(userId);
-    if (!employeeProfile) {
-      throw new NotFoundException('Employee profile not found');
-    }
-    return this.educationRepository.create({ ...createEducationDto, employeeProfileId: employeeProfile.id });
+    const employeeProfile = await this.employeeProfileRepository.findOne({ where: { userId } });
+    return this.educationRepository.create({ ...createEducationDto, employeeProfileId: employeeProfile?.id });
   }
 
   // @Get(':userId')
@@ -36,11 +33,8 @@ export class EmployeeEducationService {
   //   return this.employeeEducationService.findAll(+userId);
   // }
   async findAll(userId: number) {
-    const employeeProfile = await this.employeeProfileRepository.findByPk(userId);
-    if (!employeeProfile) {
-      throw new NotFoundException('Employee profile not found');
-    }
-    return this.educationRepository.findAll({ where: { employeeProfileId: employeeProfile.id } });
+    const employeeProfile = await this.employeeProfileRepository.findOne({ where: { userId } });
+    return this.educationRepository.findAll({ where: { employeeProfileId: employeeProfile?.id } });
   }
 
 
@@ -53,11 +47,8 @@ export class EmployeeEducationService {
   //   return this.employeeEducationService.update(+userId, +id, updateEducationDto);
   // }
   async update(userId: number, id: number, updateEducationDto: UpdateEmployeeEducationDto) {
-    const employeeProfile = await this.employeeProfileRepository.findByPk(userId);
-    if (!employeeProfile) {
-      throw new NotFoundException('Employee profile not found');
-    }
-    return this.educationRepository.update({ ...updateEducationDto, employeeProfileId: employeeProfile.id }, { where: { id } });
+    const employeeProfile = await this.employeeProfileRepository.findOne({ where: { userId } });
+    return this.educationRepository.update({ ...updateEducationDto, employeeProfileId: employeeProfile?.id }, { where: { id } });
   }
 
   // @Delete(':userId/:id')
@@ -65,7 +56,7 @@ export class EmployeeEducationService {
   //   return this.employeeEducationService.remove(+userId, +id);
   // }
   async remove(userId: number, id: number) {
-    const employeeProfile = await this.employeeProfileRepository.findByPk(userId);
+    const employeeProfile = await this.employeeProfileRepository.findOne({ where: { userId } });
     if (!employeeProfile) {
       throw new NotFoundException('Employee profile not found');
     }

@@ -22,7 +22,12 @@ import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
 import { TodoQueryDto } from './dto/todo-query.dto';
 import { TodoResponseDto } from './dto/todo-response.dto';
+import { MarkCompleteDto } from './dto/mark-complete.dto';
+import { TodoStatus } from './entities/todo.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../auth/entities/user.entity';
 
 @Controller('todos')
 export class TodoController {
@@ -87,6 +92,39 @@ export class TodoController {
     return todos.map((todo) => this.todoService.mapToResponse(todo));
   }
 
+  // Staff endpoints
+  @Get('my-todos')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.STAFF)
+  async getMyTodos(@Request() req): Promise<TodoResponseDto[]> {
+    const queryDto: TodoQueryDto = { 
+      assignedUserId: req.user.id,
+      status: TodoStatus.PENDING 
+    };
+    const todos = await this.todoService.findAll(queryDto);
+    return todos.map((todo) => this.todoService.mapToResponse(todo));
+  }
+
+  @Get('my-todos/completed-this-week')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.STAFF)
+  async getMyCompletedTodosThisWeek(@Request() req): Promise<TodoResponseDto[]> {
+    const todos = await this.todoService.findCompletedThisWeekByUser(req.user.id);
+    return todos.map((todo) => this.todoService.mapToResponse(todo));
+  }
+
+  @Get('all')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.STAFF)
+  async getAllTodos(@Query() queryDto: TodoQueryDto): Promise<TodoResponseDto[]> {
+    const queryWithPending: TodoQueryDto = {
+      ...queryDto,
+      status: TodoStatus.PENDING,
+    };
+    const todos = await this.todoService.findAll(queryWithPending);
+    return todos.map((todo) => this.todoService.mapToResponse(todo));
+  }
+
   @Get('day/:date')
   async getDayView(@Param('date') date: string): Promise<TodoResponseDto[]> {
     const todos = await this.todoService.getDayView(date);
@@ -108,6 +146,17 @@ export class TodoController {
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number): Promise<TodoResponseDto> {
     const todo = await this.todoService.findOne(id);
+    return this.todoService.mapToResponse(todo);
+  }
+
+  @Patch(':id/mark-complete')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  async markAsComplete(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() markCompleteDto: MarkCompleteDto,
+  ): Promise<TodoResponseDto> {
+    const todo = await this.todoService.markAsComplete(id, markCompleteDto.remarks);
     return this.todoService.mapToResponse(todo);
   }
 

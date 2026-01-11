@@ -7,6 +7,7 @@ export class TodoResponseDto {
   status: TodoStatus;
   assignedDate: Date;
   dueBy: Date | null;
+  remarks: string | null;
   portfolioId: number;
   createdById: number;
   createdAt: Date;

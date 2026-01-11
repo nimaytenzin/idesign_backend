@@ -23,7 +23,6 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { CustomerModule } from './modules/customer/customer.module';
 import { DiscountModule } from './modules/discount/discount.module';
 import { OutboxModule } from './modules/outbox/outbox.module';
-import { CalendarModule } from './modules/calendar/calendar.module';
 import { TodoModule } from './modules/todo/todo.module';
 import { DocumentCategoryModule } from './modules/document/document-category/document-category.module';
 import { DocumentSubCategoryModule } from './modules/document/document-sub-category/document-sub-category.module';
@@ -35,6 +34,9 @@ import { AffiliateCommissionModule } from './modules/affiliate-marketer-manageme
 import { EmployeeProfileModule } from './modules/employee-management/employee-profile/employee-profile.module';
 import { EmployeeWorkExperienceModule } from './modules/employee-management/employee-work-experience/employee-work-experience.module';
 import { EmployeeEducationModule } from './modules/employee-management/employee-education/employee-education.module';
+import { EmployeePayscaleModule } from './modules/employee-management/employee-payscale/employee-payscale.module';
+import { AttendanceModule } from './modules/attendance/attendance.module';
+import { CalendarEventModule } from './modules/calendar/calendar-event/calendar-event.module';
 
 @Module({
   imports: [
@@ -60,8 +62,7 @@ import { EmployeeEducationModule } from './modules/employee-management/employee-
     CustomerModule,
     DiscountModule,
     OutboxModule,
-    CalendarModule,
-    TodoModule,
+     TodoModule,
     DocumentCategoryModule,
     DocumentSubCategoryModule,
     DocumentModule,
@@ -73,6 +74,11 @@ import { EmployeeEducationModule } from './modules/employee-management/employee-
     EmployeeProfileModule,
     EmployeeEducationModule,
     EmployeeWorkExperienceModule,
+    EmployeePayscaleModule,
+    AttendanceModule,
+
+
+    CalendarEventModule,
   ],
   controllers: [AppController],
   providers: [AppService],

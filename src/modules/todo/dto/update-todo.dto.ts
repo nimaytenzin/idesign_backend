@@ -39,5 +39,9 @@ export class UpdateTodoDto {
   @IsEnum(TodoStatus)
   @IsOptional()
   status?: TodoStatus;
+
+  @IsString()
+  @IsOptional()
+  remarks?: string;
 }
 

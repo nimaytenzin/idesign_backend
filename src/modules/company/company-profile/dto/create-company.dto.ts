@@ -6,6 +6,7 @@ import {
   IsBoolean,
   IsUrl,
   IsEnum,
+  IsNumber,
 } from 'class-validator';
 import { ZpssBankName } from '../entities/company.entity';
 
@@ -46,6 +47,14 @@ export class CreateCompanyDto {
   @IsOptional()
   country?: string;
 
+  @IsNumber()
+  @IsNotEmpty()
+  lat: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  long: number;
+
   @IsUrl()
   @IsOptional()
   website?: string;
@@ -73,6 +82,14 @@ export class CreateCompanyDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @IsString()
+  @IsOptional()
+  vision?: string;
+
+  @IsString()
+  @IsOptional()
+  mission?: string;
 
   @IsString()
   @IsOptional()
