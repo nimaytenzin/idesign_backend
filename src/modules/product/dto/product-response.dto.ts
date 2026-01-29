@@ -31,13 +31,12 @@ export class ProductResponseDto {
   dimensions: string;
   weight: number;
   price: number;
-  material: string;
+  material: string | null;
   isAvailable: boolean;
   isFeatured: boolean;
   productSubCategoryId: number;
   rating: number;
   salesCount: number;
-  stockQuantity: number;
   createdAt: Date;
   updatedAt: Date;
   productSubCategory?: ProductSubCategoryResponseDto;

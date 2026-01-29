@@ -42,6 +42,11 @@ export class CreateOrderDto {
   @IsOptional()
   paymentMethod?: PaymentMethod;
 
+  /** Optional. When paymentMethod is not CASH and not provided, the bank account with useForRmaPg is used (e.g. online, RMA PG). */
+  @IsOptional()
+  @IsNumber()
+  bankAccountId?: number;
+
   // Financial Information
   @IsNumber()
   @IsOptional()
@@ -80,6 +85,10 @@ export class CreateOrderDto {
   @IsString()
   @IsOptional()
   referrerSource?: string;
+
+  @IsString()
+  @IsOptional()
+  transactionId?: string;
 
   // User References
   @IsNumber()

@@ -12,6 +12,8 @@ import {
   BadRequestException,
   Logger,
   UseGuards,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -22,21 +24,35 @@ import { OrderQueryDto } from './dto/order-query.dto';
 import { MonthQueryDto } from './dto/month-query.dto';
 import { OrdersByMonthResponseDto } from './dto/orders-by-month-response.dto';
 import { OrderStatisticsByMonthResponseDto } from './dto/order-statistics-by-month-response.dto';
+import { OrderMonthlyReportResponseDto } from './dto/order-monthly-report-response.dto';
+import { OrderDailyStatsResponseDto } from './dto/order-daily-stats-response.dto';
+import { OrderYearlyReportResponseDto } from './dto/order-yearly-report-response.dto';
 import { TrackOrderDto } from './dto/track-order.dto';
 import { UpdateFulfillmentStatusDto } from './dto/update-fulfillment-status.dto';
 import { UpdatePaymentStatusDto } from './dto/update-payment-status.dto';
 import { VerifyOrderDto } from './dto/verify-order.dto';
 import { MarkDeliveredDto } from './dto/mark-delivered.dto';
+import { MarkConfirmedDto } from './dto/mark-confirmed.dto';
 import { ConfirmOrderDto } from './dto/confirm-order.dto';
 import { ShipOrderDto } from './dto/ship-order.dto';
 import { GetCustomerStatusDto } from './dto/get-customer-status.dto';
 import { Order } from './entities/order.entity';
+import { OrderSource } from './entities/order.enums';
 import { GetOrdersPaginatedQueryDto } from './dto/get-orders-paginated-query.dto';
+import { GetOrdersCompletedQueryDto } from './dto/get-orders-completed-query.dto';
+import { GetOrdersCancelledQueryDto } from './dto/get-orders-cancelled-query.dto';
+import { AdminPhaseCountsResponseDto } from './dto/admin-phase-counts-response.dto';
+import { RecordOrderPaymentDto } from '../payment-receipt/dto/record-order-payment.dto';
+import { PaymentReceipt } from '../payment-receipt/entities/payment-receipt.entity';
+import { PaymentReceiptService } from '../payment-receipt/payment-receipt.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../auth/entities/user.entity';
 import { PaginatedResponseDto } from '../../common/pagination/dto/paginated-response.dto';
+import { OrderCheckoutResponseDto } from './dto/order-checkout-response.dto';
+import { PaymentSettlementService } from '../external/payment-settlement/payment-settlement.service';
+import { ErrorResponse } from '../external/payment-settlement/error-reponse';
 // SMS sending is handled via templates and outbox processor - no direct SMS sending
 
 @Controller('orders')
@@ -45,7 +61,9 @@ export class OrderController {
 
   constructor(
     private readonly orderService: OrderService,
-    // SMS sending is handled via templates and outbox processor - no direct SMS sending
+    private readonly paymentReceiptService: PaymentReceiptService,
+    @Inject(forwardRef(() => PaymentSettlementService))
+    private readonly paymentSettlementService: PaymentSettlementService,
   ) {}
 
   /**
@@ -62,129 +80,81 @@ export class OrderController {
     return orderId;
   }
 
-  // Order Endpoints
-  @Post()
-  async createOrder(
+  /**
+   * Online checkout: single entry point for online orders. Creates the order and initiates payment in one request.
+   * Order is always created and committed; if payment initiation fails, returns order + paymentFailed so client can retry payment (e.g. POST /payment-settlement/initiate-payment with orderId + amount).
+   * @route POST /orders/online/checkout
+   */
+  @Post('online/checkout')
+  async checkout(
     @Request() req,
     @Body() createOrderDto: CreateOrderDto,
-  ): Promise<Order> {
-    // Extract referrer from request if not provided in DTO
+  ): Promise<OrderCheckoutResponseDto> {
     if (!createOrderDto.referrerSource) {
       const referrer = req.headers['referer'] || req.headers['referrer'];
       if (referrer) {
         createOrderDto.referrerSource = referrer as string;
       }
     }
-    
-    // Set servedBy from authenticated user for counter orders
-    if (createOrderDto.orderSource === 'COUNTER' && req.user?.id) {
-      createOrderDto.servedBy = req.user.id;
+    createOrderDto.orderSource = OrderSource.ONLINE;
+
+    const order = await this.orderService.createOrder(createOrderDto, req.user?.id);
+    const amount = parseFloat(order.totalPayable.toString());
+    const paymentResult = await this.paymentSettlementService.processInitiatePayment({
+      orderId: order.id,
+      amount,
+    });
+
+    if (paymentResult instanceof ErrorResponse) {
+      return {
+        order,
+        paymentFailed: true,
+        paymentError: paymentResult.message,
+      };
     }
-    
-    // SMS notification is handled in the service
-    return this.orderService.createOrder(createOrderDto, req.user?.id);
+    return {
+      order,
+      paymentInitiation: paymentResult,
+    };
   }
 
-
-  //Admin/Staff Place Order Endpoint
-
-  // Payment status is paid and payment details is sent in the payload,
-  // for instore purchase, where fulfillment type is instore, payment method is cash or bank transfer,
-  // delivery rate id is not required, delivery location is not required, delivery mode is not required,
-  // shipping address is not required, expected delivery date is not required,
-  // internal notes is the internal notes, referrer source is the referrer source,
-    // affiliate id is not required, served by is not required,
-  // placed at,confirmed at,processing at,shipping at,delivered at  and paid at are date now,
+  /**
+   * Instore place order: pay now, INSTORE (collect at shop) or DELIVERY (deliver to address).
+   * Same behavior as POST /orders/admin/counter with paymentMethod + fulfillmentType INSTORE or DELIVERY.
+   * Kept for backward compatibility; orderSource forced to COUNTER.
+   * @route POST /orders/instore/place-order
+   */
   @Post('instore/place-order')
   async adminPlaceOrder(
     @Request() req,
     @Body() createOrderDto: CreateOrderDto,
   ): Promise<Order> {
-    console.log(createOrderDto);
-    console.log(req.user?.id);
-    return this.orderService.instorePlaceOrder(createOrderDto, req.user?.id);
-  }
-
-  @Get()
-  async findAllOrders(@Query() query: OrderQueryDto): Promise<Order[]> {
-    return this.orderService.findAllOrders(query);
+    return this.orderService.instorePlaceOrder(
+      { ...createOrderDto, orderSource: OrderSource.COUNTER },
+      req.user?.id,
+    );
   }
 
   /**
-   * Get orders paginated by fulfillment status
-   * 
-   * @description Retrieves a paginated list of orders, optionally filtered by fulfillment status.
-   * This endpoint is restricted to ADMIN and STAFF roles only. Orders are returned with full
-   * details including customer information, order items with products, and applied discounts.
-   * Results are ordered by placement date (most recent first).
-   * 
-   * @route GET /orders/paginated
-   * @access Private (Admin, Staff)
-   * 
-   * @query {number} [page=1] - Page number (minimum: 1)
-   * @query {number} [limit=10] - Number of items per page (minimum: 1, maximum: 100)
-   * @query {FulfillmentStatus} [fulfillmentStatus] - Optional filter by fulfillment status
-   *   - PLACED: Order has been placed but not yet confirmed
-   *   - CONFIRMED: Order has been confirmed and is ready for processing
-   *   - PROCESSING: Order is being prepared/processed
-   *   - SHIPPING: Order is out for delivery
-   *   - DELIVERED: Order has been successfully delivered
-   *   - CANCELED: Order has been canceled
-   * 
-   * @returns {PaginatedResponseDto<Order>} Paginated response containing:
-   *   - data: Array of Order objects with customer, orderItems, and orderDiscounts
-   *   - meta: Pagination metadata (total, page, limit, totalPages, hasNextPage, hasPreviousPage)
-   * 
-   * @example
-   * // Get first page of all orders (default: 10 items per page)
-   * GET /orders/paginated
-   * 
-   * @example
-   * // Get second page with 20 items per page
-   * GET /orders/paginated?page=2&limit=20
-   * 
-   * @example
-   * // Get all orders with PROCESSING status
-   * GET /orders/paginated?fulfillmentStatus=PROCESSING
-   * 
-   * @example
-   * // Get first page of DELIVERED orders with 15 items per page
-   * GET /orders/paginated?page=1&limit=15&fulfillmentStatus=DELIVERED
-   * 
-   * @example Response:
-   * {
-   *   "data": [
-   *     {
-   *       "id": 1,
-   *       "orderNumber": "ORD-2024-0001",
-   *       "customer": { ... },
-   *       "orderItems": [ ... ],
-   *       "orderDiscounts": [ ... ],
-   *       "fulfillmentStatus": "PROCESSING",
-   *       "paymentStatus": "PAID",
-   *       ...
-   *     }
-   *   ],
-   *   "meta": {
-   *     "total": 50,
-   *     "page": 1,
-   *     "limit": 10,
-   *     "totalPages": 5,
-   *     "hasNextPage": true,
-   *     "hasPreviousPage": false
-   *   }
-   * }
-   * 
-   * @throws {401} Unauthorized - If user is not authenticated
-   * @throws {403} Forbidden - If user is not ADMIN or STAFF
-   * @throws {400} BadRequest - If query parameters are invalid (e.g., page < 1, limit > 100)
+   * Counter order (Admin/Staff): single route for pay-now (INSTORE/DELIVERY/PICKUP) or order-to-pay-later.
+   * Body: CreateOrderDto. orderSource forced to COUNTER.
+   * - paymentMethod + INSTORE/DELIVERY → pay now, fulfill (INSTORE=CONFIRMED, DELIVERY=PROCESSING)
+   * - paymentMethod + PICKUP or omitted → pay now, collect later (PICKUP, CONFIRMED+PAID)
+   * - no paymentMethod → order to pay later (PLACED+PENDING); fulfillmentType required: INSTORE|PICKUP|DELIVERY.
+   * When paymentMethod is not CASH, bankAccountId required.
+   * @route POST /orders/admin/counter
    */
-  @Get('paginated')
+  @Post('admin/counter')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.STAFF)
-  async getOrdersPaginated(@Query() queryDto: GetOrdersPaginatedQueryDto): Promise<PaginatedResponseDto<Order>> {
-    return this.orderService.getOrdersPaginated(queryDto);
+  async createCounterOrder(
+    @Request() req,
+    @Body() createOrderDto: CreateOrderDto,
+  ): Promise<Order> {
+    return this.orderService.createCounterOrder(createOrderDto, req.user?.id);
   }
+
+
 
   // Order Tracking Endpoint - MUST come before :id route
   @Get('track')
@@ -241,6 +211,146 @@ export class OrderController {
     return this.orderService.getOrderStatisticsByMonth({ year: yearNum, month: monthNum });
   }
 
+  /**
+   * Monthly report: total orders (status != PLACED), revenue (from PAID orders), total to collect (PENDING/PARTIAL).
+   * @route GET /orders/monthly-report?year=&month=
+   */
+  @Get('monthly-report')
+  async getOrderMonthlyReport(
+    @Query('year') year: string,
+    @Query('month') month: string,
+  ): Promise<OrderMonthlyReportResponseDto> {
+    const yearNum = parseInt(year, 10);
+    const monthNum = parseInt(month, 10);
+    if (isNaN(yearNum) || isNaN(monthNum)) {
+      throw new BadRequestException('Year and month must be valid numbers');
+    }
+    if (yearNum < 1900 || yearNum > 2100) {
+      throw new BadRequestException('Year must be between 1900 and 2100');
+    }
+    if (monthNum < 1 || monthNum > 12) {
+      throw new BadRequestException('Month must be between 1 and 12');
+    }
+    return this.orderService.getOrderMonthlyReport({ year: yearNum, month: monthNum });
+  }
+
+  /**
+   * Daily stats: total orders (status != PLACED), revenue, total to collect for one day.
+   * @route GET /orders/daily-stats?date=YYYY-MM-DD
+   */
+  @Get('daily-stats')
+  async getOrderDailyStats(
+    @Query('date') date: string,
+  ): Promise<OrderDailyStatsResponseDto> {
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new BadRequestException('date must be YYYY-MM-DD');
+    }
+    return this.orderService.getOrderDailyStats(date);
+  }
+
+  /**
+   * Yearly report: all 12 monthly reports for the selected year (orders ≠ PLACED, revenue, total to collect).
+   * @route GET /orders/yearly-report?year=YYYY
+   */
+  @Get('yearly-report')
+  async getOrderYearlyReport(
+    @Query('year') year: string,
+  ): Promise<OrderYearlyReportResponseDto> {
+    const yearNum = parseInt(year, 10);
+    if (isNaN(yearNum)) {
+      throw new BadRequestException('year must be a valid number');
+    }
+    if (yearNum < 1900 || yearNum > 2100) {
+      throw new BadRequestException('year must be between 1900 and 2100');
+    }
+    return this.orderService.getOrderYearlyReport(yearNum);
+  }
+
+  // --- Active Workflow Tabs (Real-time / No Pagination) ---
+
+  /**
+   * To Process: Unpaid & Not Delivered. (PLACED | CONFIRMED) + (PENDING | PARTIAL).
+   * Primary action: Record Payment / Confirm Order.
+   * @route GET /orders/admin/to-process
+   */
+  @Get('to-confirm')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  async getOrdersToProcess(): Promise<Order[]> {
+    return this.orderService.findOrdersToConfirm();
+  }
+
+  /**
+   * To Deliver: Paid & Not Delivered. (CONFIRMED | PROCESSING) + PAID.
+   * Primary action: Ship Order (Assign Driver).
+   * @route GET /orders/admin/to-deliver
+   */
+  @Get('to-deliver')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  async getOrdersToDeliverForAdmin(): Promise<Order[]> {
+    return this.orderService.findOrdersToDeliver();
+  }
+
+    
+    @Get('for-pickup')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.STAFF)
+    async getOrdersForPickup(): Promise<Order[]> {
+      return this.orderService.findOrdersReadyForPickup();
+    }
+  
+
+  /**
+   * Unpaid Delivery: Delivered but Unpaid. DELIVERED + (PENDING | PARTIAL).
+   * Primary action: Record Final Payment.
+   * @route GET /orders/admin/unpaid-delivery
+   */
+  @Get('unpaid-delivery')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  async getOrdersUnpaidDelivery(): Promise<Order[]> {
+    return this.orderService.findOrdersUnpaidDelivery();
+  }
+
+  /**
+   * To Track: DELIVERY + SHIPPING (delivery details added: driver, vehicle, expectedDeliveryDate, etc.).
+   * Payment can be paid or unpaid (no payment filter). For tracking / out-for-delivery view.
+   * @route GET /orders/admin/to-track
+   */
+  @Get('to-track')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  async getOrdersToTrack(): Promise<Order[]> {
+    return this.orderService.findOrdersToTrack();
+  }
+
+  // --- History Tabs (Paginated + Date Filter) ---
+
+  /**
+   * Completed: DELIVERED + PAID. Filter by deliveredAt; default: current month.
+   * @route GET /orders/admin/completed
+   * @query deliveredAtFrom (optional), deliveredAtTo (optional), page, limit
+   */
+  @Get('admin/completed')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  async getOrdersCompleted(@Query() query: GetOrdersCompletedQueryDto): Promise<PaginatedResponseDto<Order>> {
+    return this.orderService.getOrdersCompleted(query);
+  }
+
+  /**
+   * Cancelled: CANCELED. Filter by updatedAt; default: current month.
+   * @route GET /orders/admin/cancelled
+   * @query updatedAtFrom (optional), updatedAtTo (optional), page, limit
+   */
+  @Get('admin/cancelled')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  async getOrdersCancelled(@Query() query: GetOrdersCancelledQueryDto): Promise<PaginatedResponseDto<Order>> {
+    return this.orderService.getOrdersCancelled(query);
+  }
+
   @Get(':id')
   async findOneOrder(@Param('id') id: string): Promise<Order & { customerStatusMessage?: string }> {
     const orderId = this.validateOrderId(id);
@@ -293,6 +403,31 @@ export class OrderController {
   ): Promise<Order> {
     const orderId = this.validateOrderId(id);
     return this.orderService.updatePaymentStatus(orderId, updatePaymentStatusDto);
+  }
+
+  /**
+   * Record a payment (full or partial) for an order. Creates a PaymentReceipt. Supports multiple payments per order.
+   * @route POST /orders/:id/payments
+   */
+  @Post(':id/payments')
+  async recordOrderPayment(
+    @Param('id') id: string,
+    @Body() dto: RecordOrderPaymentDto,
+  ): Promise<PaymentReceipt> {
+    const orderId = this.validateOrderId(id);
+    return this.paymentReceiptService.recordOrderPayment(orderId, dto);
+  }
+
+  /**
+   * List PaymentReceipts for an order.
+   * @route GET /orders/:id/payment-receipts
+   */
+  @Get(':id/payment-receipts')
+  async getPaymentReceipts(
+    @Param('id') id: string,
+  ): Promise<PaymentReceipt[]> {
+    const orderId = this.validateOrderId(id);
+    return this.paymentReceiptService.getPaymentReceiptsForOrder(orderId);
   }
 
   /**
@@ -385,6 +520,22 @@ export class OrderController {
   ): Promise<Order> {
     const orderId = this.validateOrderId(id);
     return this.orderService.confirmOrder(orderId, confirmOrderDto);
+  }
+
+  /**
+   * Mark order as CONFIRMED (fulfillmentStatus PLACED → CONFIRMED). Order must be in PLACED.
+   * Does not change payment; use POST /orders/:id/confirm to confirm and record payment.
+   * @route POST /orders/:id/mark-confirmed
+   */
+  @Post(':id/mark-confirmed')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  async markOrderAsConfirmed(
+    @Param('id') id: string,
+    @Body() body?: MarkConfirmedDto,
+  ): Promise<Order> {
+    const orderId = this.validateOrderId(id);
+    return this.orderService.markOrderAsConfirmed(orderId, body?.internalNotes);
   }
 
   /**
@@ -496,6 +647,11 @@ export class OrderController {
     return this.orderService.processPayment(orderId, processPaymentDto);
   }
 
+  /**
+   * Cancel order. Use for orders where payment was initiated (e.g. after checkout) but the customer abandons or cancels before completing payment.
+   * Cannot cancel delivered orders. Idempotent if order is already canceled. See docs/ONLINE_ORDER_CHECKOUT.md.
+   * @route POST /orders/:id/cancel
+   */
   @Post(':id/cancel')
   async cancelOrder(
     @Param('id') id: string,
@@ -570,6 +726,19 @@ export class OrderController {
   ): Promise<Order> {
     const orderId = this.validateOrderId(id);
     return this.orderService.markOrderAsDelivered(orderId, markDeliveredDto);
+  }
+
+  /**
+   * Mark a PICKUP or INSTORE order as collected (fulfillmentStatus → DELIVERED).
+   * Use when the customer comes to the shop to collect. For DELIVERY orders use POST /orders/:id/deliver.
+   * @route POST /orders/:id/mark-collected
+   */
+  @Post(':id/mark-collected')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  async markOrderAsCollected(@Param('id') id: string): Promise<Order> {
+    const orderId = this.validateOrderId(id);
+    return this.orderService.markOrderAsCollected(orderId);
   }
 
   @Delete(':id')

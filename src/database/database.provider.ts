@@ -12,9 +12,6 @@ import { ProductSubCategory } from 'src/modules/product-sub-category/entities/pr
 import { Product } from 'src/modules/product/entities/product.entity';
 import { ProductImage } from 'src/modules/product/entities/product-image.entity';
 import { Order } from 'src/modules/order/entities/order.entity';
-import { ChartOfAccounts } from 'src/modules/accounts/chart-of-accounts/entities/chart-of-accounts.entity';
-import { Transaction } from 'src/modules/accounts/transaction/entities/transaction.entity';
-import { Expense } from 'src/modules/accounts/expense/entities/expense.entity';
 import { Company } from 'src/modules/company/company-profile/entities/company.entity';
 import { Customer } from 'src/modules/customer/entities/customer.entity';
 import { SmsTemplate } from 'src/modules/sms-template/entities/sms-template.entity';
@@ -24,6 +21,7 @@ import { DiscountCategory } from 'src/modules/discount/entities/discount-categor
 import { DiscountSubcategory } from 'src/modules/discount/entities/discount-subcategory.entity';
 import { OrderItem } from 'src/modules/order/entities/order-item.entity';
 import { OrderDiscount } from 'src/modules/order/entities/order-discount.entity';
+import { PaymentReceipt } from 'src/modules/payment-receipt/entities/payment-receipt.entity';
 import { Outbox } from 'src/modules/outbox/entities/outbox.entity';
 import { EmployeeProfile } from 'src/modules/employee-management/employee-profile/entities/employee-profile.entity';
 import { EmployeeEducation } from 'src/modules/employee-management/employee-education/entities/employee-education.entity';
@@ -37,13 +35,15 @@ import { DeliveryRate } from 'src/modules/delivery/delivery-rate/entities/delive
 import { DeliveryLocation } from 'src/modules/delivery/delivery-location/entities/delivery-location.entity';
 import { AffiliateProfile } from 'src/modules/affiliate-marketer-management/affiliate-profile/entities/affiliate-profile.entity';
 import { CalendarEvent } from 'src/modules/calendar/calendar-event/entities/calendar-event.entity';
+import { Expense } from 'src/modules/expense/entities/expense.entity';
+import { BankAccount } from 'src/modules/bank-account/entities/bank-account.entity';
 
 export const databaseProviders = [
   {
     provide: SEQUELIZE,
     useFactory: async () => {
       let config;
-      console.log('NODE_ENV:', process.env.NODE_ENV);  
+      console.log('NODE_ENV:', process.env.NODE_ENV);
       console.log('PRODUCTION constant:', PRODUCTION);
 
       switch (process.env.NODE_ENV) {
@@ -60,19 +60,22 @@ export const databaseProviders = [
           config = databaseConfig.development;
       }
       console.log('Database Config:', config);
-      
+
       // Remove password field if it's empty or undefined to avoid authentication issues
       const sequelizeConfig: any = {
         ...config,
         dialect: (config.dialect || 'mysql') as any,
       };
-      
+
       // If password is undefined, empty string, null, or only whitespace, don't include it in the config
       // This prevents Sequelize from trying to authenticate with an empty password
-      if (!config.password || (typeof config.password === 'string' && config.password.trim() === '')) {
+      if (
+        !config.password ||
+        (typeof config.password === 'string' && config.password.trim() === '')
+      ) {
         delete sequelizeConfig.password;
       }
-      
+
       const sequelize = new Sequelize(sequelizeConfig);
       sequelize.addModels([
         User,
@@ -90,29 +93,30 @@ export const databaseProviders = [
         Order,
         OrderItem,
         OrderDiscount,
+        PaymentReceipt,
+        BankAccount,
         Customer,
-         Outbox,
-        ChartOfAccounts,
-        Transaction,
-        Expense,
+        Outbox,
         Company,
         SmsTemplate,
         Discount,
         DiscountProduct,
         DiscountCategory,
         DiscountSubcategory,
-         
+
         DocumentCategory,
         DocumentSubCategory,
         Document,
         DeliveryRate,
         DeliveryLocation,
 
-
         CalendarEvent,
+        Expense,
       ]);
 
-      await sequelize.sync({ alter: true });
+      // Avoid alter: true — it can create duplicate indexes on each restart and hit MySQL's 64-index limit.
+      // Use sync() to create missing tables only. For schema changes, use migrations.
+      await sequelize.sync();
       return sequelize;
     },
   },

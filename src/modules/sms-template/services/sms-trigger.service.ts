@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Order } from '../../order/entities/order.entity';
 import { FulfillmentStatus, PaymentStatus,OrderSource } from '../../order/entities/order.enums';
@@ -7,6 +7,26 @@ import { Outbox, OutboxEventType, OutboxStatus } from '../../outbox/entities/out
 import { SmsTemplateService } from './sms-template.service';
 import { OutboxService } from '../../outbox/services/outbox.service';
 import { Customer } from '../../customer/entities/customer.entity';
+
+/** Fallback SMS messages when no template exists for a trigger. Use {{orderNumber}} and {{customerName}}. */
+const FALLBACK_MESSAGES: Record<SmsTriggerEvent, string> = {
+  [SmsTriggerEvent.ORDER_PLACED]:
+    'Thank you! Your order {{orderNumber}} has been received. We will notify you when it is confirmed.',
+  [SmsTriggerEvent.PLACED_TO_CONFIRMED]:
+    'Your order {{orderNumber}} has been confirmed. We will update you on the next steps.',
+  [SmsTriggerEvent.CONFIRMED_TO_PROCESSING]:
+    'Your order {{orderNumber}} is now being processed. We will notify you when it ships.',
+  [SmsTriggerEvent.PROCESSING_TO_SHIPPING]:
+    'Your order {{orderNumber}} has been shipped! Track your delivery for updates.',
+  [SmsTriggerEvent.SHIPPING_TO_DELIVERED]:
+    'Your order {{orderNumber}} has been delivered. Thank you for shopping with us!',
+  [SmsTriggerEvent.ORDER_CANCELED]:
+    'Your order {{orderNumber}} has been canceled. If you have questions, please contact us.',
+  [SmsTriggerEvent.PAYMENT_FAILED]:
+    'Payment for order {{orderNumber}} could not be processed. Please try again or contact us.',
+  [SmsTriggerEvent.COUNTER_PAYMENT_RECEIPT]:
+    'Thank you! Your order {{orderNumber}} payment has been received.',
+};
 
 @Injectable()
 export class SmsTriggerService {
@@ -137,8 +157,12 @@ export class SmsTriggerService {
       this.logger.warn(
         `[SMS Trigger] ⚠️  No active templates found for trigger ${triggerEvent} and orderSource ${order.orderSource}`,
       );
-      this.logger.warn(
-        `[SMS Trigger] This means no SMS will be sent. Please create/activate a template for this event.`,
+      this.logger.log(
+        `[SMS Trigger] Sending fallback SMS for trigger ${triggerEvent} so customer still receives a proper message.`,
+      );
+      await this.scheduleFallbackSms(order, triggerEvent, customer.phoneNumber);
+      this.logger.log(
+        `[SMS Trigger] ========================================`,
       );
       return;
     }
@@ -270,6 +294,60 @@ export class SmsTriggerService {
     this.logger.log(
       `[Template Scheduling] ✅ Completed scheduling for template "${template.name}"`,
     );
+  }
+
+  /**
+   * Build fallback message for a trigger when no template exists.
+   * Replaces {{orderNumber}} and {{customerName}}.
+   */
+  private getFallbackMessage(order: Order, triggerEvent: SmsTriggerEvent): string {
+    const customer = (order as any).customer as Customer | undefined;
+    const orderNumber = order.orderNumber || `#${order.id}`;
+    const customerName = customer?.name || 'Customer';
+    const template = FALLBACK_MESSAGES[triggerEvent] || `Your order ${orderNumber} status has been updated.`;
+    return template
+      .replace(/\{\{orderNumber\}\}/g, orderNumber)
+      .replace(/\{\{customerName\}\}/g, customerName);
+  }
+
+  /**
+   * Schedule a single fallback SMS when no template exists for the trigger.
+   * Ensures the customer always receives a proper message for each order process.
+   */
+  private async scheduleFallbackSms(
+    order: Order,
+    triggerEvent: SmsTriggerEvent,
+    phoneNumber: string,
+  ): Promise<void> {
+    const message = this.getFallbackMessage(order, triggerEvent);
+    const scheduledFor = new Date();
+
+    try {
+      await this.outboxModel.create({
+        orderId: order.id,
+        eventType: OutboxEventType.SEND_SMS,
+        payload: {
+          phoneNumber,
+          message,
+          templateId: null,
+          templateName: `Fallback: ${triggerEvent}`,
+          sendIndex: 1,
+          totalSends: 1,
+        },
+        scheduledFor,
+        status: OutboxStatus.PENDING,
+        retryCount: 0,
+      });
+      this.logger.log(
+        `[SMS Trigger] ✅ Fallback SMS queued for order ${order.id}, trigger ${triggerEvent}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `[SMS Trigger] ❌ Failed to queue fallback SMS for order ${order.id}: ${(error as Error)?.message}`,
+        (error as Error)?.stack,
+      );
+      throw error;
+    }
   }
 }
 

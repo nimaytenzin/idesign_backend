@@ -33,8 +33,8 @@ export class CreateProductDto {
   price: number;
 
   @IsString()
-  @IsNotEmpty()
-  material: string;
+  @IsOptional()
+  material?: string;
 
   @IsBoolean()
   @IsOptional()
@@ -47,9 +47,4 @@ export class CreateProductDto {
   @IsNumber()
   @IsNotEmpty()
   productSubCategoryId: number;
-
-  @IsNumber()
-  @Min(0)
-  @IsOptional()
-  stockQuantity?: number;
 }

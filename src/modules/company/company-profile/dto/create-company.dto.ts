@@ -77,6 +77,10 @@ export class CreateCompanyDto {
 
   @IsUrl()
   @IsOptional()
+  instagramLink?: string;
+
+  @IsUrl()
+  @IsOptional()
   tiktokLink?: string;
 
   @IsString()

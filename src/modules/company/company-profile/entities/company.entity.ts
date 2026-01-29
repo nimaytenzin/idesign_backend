@@ -126,6 +126,12 @@ export class Company extends Model<Company> {
     type: DataType.STRING(500),
     allowNull: true,
   })
+  instagramLink: string;
+
+  @Column({
+    type: DataType.STRING(500),
+    allowNull: true,
+  })
   tiktokLink: string;
 
   @Column({

@@ -13,10 +13,8 @@ import { FulfillmentStatus, PaymentStatus, PaymentMethod, OrderSource, Fulfillme
 import { OrderItem } from './entities/order-item.entity';
 import { OrderDiscount } from './entities/order-discount.entity';
 import { Product } from '../product/entities/product.entity';
-import { AccountsService } from '../accounts/accounts.service';
+import { PaymentReceiptService } from '../payment-receipt/payment-receipt.service';
 import { CustomerService } from '../customer/customer.service';
-import { Transaction } from '../accounts/transaction/entities/transaction.entity';
-import { ChartOfAccounts } from '../accounts/chart-of-accounts/entities/chart-of-accounts.entity';
 import { CustomerDetailsDto } from '../customer/dto/customer-details.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
@@ -33,6 +31,9 @@ import { OrderQueryDto } from './dto/order-query.dto';
 import { MonthQueryDto } from './dto/month-query.dto';
 import { OrdersByMonthResponseDto } from './dto/orders-by-month-response.dto';
 import { OrderStatisticsByMonthResponseDto } from './dto/order-statistics-by-month-response.dto';
+import { OrderMonthlyReportResponseDto } from './dto/order-monthly-report-response.dto';
+import { OrderDailyStatsResponseDto } from './dto/order-daily-stats-response.dto';
+import { OrderYearlyReportResponseDto } from './dto/order-yearly-report-response.dto';
 import { TrackOrderDto } from './dto/track-order.dto';
 import { MarkDeliveredDto } from './dto/mark-delivered.dto';
 import { SmsTriggerService } from '../sms-template/services/sms-trigger.service';
@@ -47,6 +48,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { AffiliateProfile } from '../affiliate-marketer-management/affiliate-profile/entities/affiliate-profile.entity';
 import { PaginationService } from '../../common/pagination/pagination.service';
 import { GetOrdersPaginatedQueryDto } from './dto/get-orders-paginated-query.dto';
+import { GetOrdersCompletedQueryDto } from './dto/get-orders-completed-query.dto';
+import { GetOrdersCancelledQueryDto } from './dto/get-orders-cancelled-query.dto';
+import { CounterPayNowPickupLaterDto } from './dto/counter-pay-now-pickup-later.dto';
 import { PaginatedResponseDto } from '../../common/pagination/dto/paginated-response.dto';
 
 @Injectable()
@@ -62,6 +66,7 @@ export class OrderService {
     private orderDiscountModel: typeof OrderDiscount,
     @InjectModel(Product)
     private productModel: typeof Product,
+    private readonly paymentReceiptService: PaymentReceiptService,
     @InjectModel(User)
     private userModel: typeof User,
     @InjectModel(AffiliateProfile)
@@ -70,7 +75,6 @@ export class OrderService {
     private affiliateCommissionModel: typeof AffiliateCommission,
     private readonly sequelize: Sequelize,
     private readonly customerService: CustomerService,
-    private readonly accountsService: AccountsService,
     private readonly smsTriggerService: SmsTriggerService,
     private readonly discountCalculationService: DiscountCalculationService,
     private readonly paginationService: PaginationService,
@@ -188,29 +192,20 @@ export class OrderService {
     };
   }
 
-  // Receipt Number Generation
-  private async generateReceiptNumber(): Promise<string> {
+  // Invoice Number Generation
+  private async generateInvoiceNumber(transaction?: any): Promise<string> {
     const year = new Date().getFullYear();
-    const prefix = `RCP-${year}-`;
+    const prefix = `INV-${year}-`;
 
-    // Find the last receipt number for this year
-    const lastOrder = await this.orderModel.findOne({
-      where: {
-        receiptNumber: {
-          [Op.like]: `${prefix}%`,
-        },
-      },
-      order: [['receiptNumber', 'DESC']],
+    const last = await this.orderModel.findOne({
+      where: { invoiceNumber: { [Op.like]: `${prefix}%` } },
+      order: [['invoiceNumber', 'DESC']],
+      transaction,
     });
 
-    let sequence = 1;
-    if (lastOrder) {
-      const lastSequence = parseInt(
-        lastOrder.receiptNumber.replace(prefix, ''),
-      );
-      sequence = lastSequence + 1;
-    }
-
+    const sequence = last
+      ? parseInt(String(last.invoiceNumber).replace(prefix, ''), 10) + 1
+      : 1;
     return `${prefix}${sequence.toString().padStart(4, '0')}`;
   }
 
@@ -367,8 +362,9 @@ export class OrderService {
         `  - Total payable: ${totalPayable}`,
       );
 
-      // Generate order number
+      // Generate order number and invoice number
       const orderNumber = await this.generateOrderNumberInTransaction(transaction);
+      const invoiceNumber = await this.generateInvoiceNumber(transaction);
 
       // Determine order type - payment status always starts as PENDING for order placement
       const orderSource = createOrderDto.orderSource || OrderSource.ONLINE;
@@ -396,6 +392,7 @@ export class OrderService {
         {
           customerId: customer.id,
           orderNumber,
+          invoiceNumber,
           orderSource: createOrderDto.orderSource || OrderSource.ONLINE,
           fulfillmentType,
           subTotal: subtotal,
@@ -526,33 +523,18 @@ export class OrderService {
         transaction,
       });
 
-      // Trigger SMS templates (after transaction commits - async, won't block)
-      const triggerEvent =
-        orderSource === OrderSource.COUNTER
-          ? SmsTriggerEvent.COUNTER_PAYMENT_RECEIPT
-          : SmsTriggerEvent.ORDER_PLACED;
-
       this.logger.log(
-        `[Order Created] Order ID: ${savedOrder.id}, Order Number: ${savedOrder.orderNumber}, Source: ${orderSource}, Payment Status: ${paymentStatus}, Trigger Event: ${triggerEvent}`,
-      );
-      this.logger.log(
-        `[SMS Trigger] Starting SMS template processing for order ${savedOrder.id} with trigger: ${triggerEvent}, orderSource: ${orderSource}`,
+        `[Order Created] Order ID: ${savedOrder.id}, Order Number: ${savedOrder.orderNumber}, Source: ${orderSource}, Payment Status: ${paymentStatus}`,
       );
 
-      // Process SMS templates asynchronously (fire and forget)
-      this.smsTriggerService
-        .processSmsTemplates(savedOrder, triggerEvent)
-        .then(() => {
-          this.logger.log(
-            `[SMS Trigger] Successfully queued SMS templates for order ${savedOrder.id}`,
-          );
-        })
-        .catch((error) => {
-          this.logger.error(
-            `[SMS Trigger] Failed to process SMS templates for order ${savedOrder.id}: ${error.message || error}`,
-            error.stack,
-          );
-        });
+      // SMS templates: skip for COUNTER; counter flows send their own non-template SMS.
+      if (orderSource !== OrderSource.COUNTER) {
+        const triggerEvent = SmsTriggerEvent.ORDER_PLACED;
+        this.smsTriggerService
+          .processSmsTemplates(savedOrder, triggerEvent)
+          .then(() => this.logger.log(`[SMS Trigger] Queued SMS templates for order ${savedOrder.id}`))
+          .catch((e) => this.logger.error(`[SMS Trigger] order ${savedOrder.id}: ${(e as Error)?.message}`, (e as Error)?.stack));
+      }
 
       return savedOrder;
     });
@@ -566,9 +548,9 @@ export class OrderService {
    * - Payment status is PAID
    * - Payment method must be CASH or bank transfer
    * - All timestamps (placedAt, confirmedAt, processingAt, paidAt) are set to now
-   * - If INSTORE: no delivery charges, delivery fields not required, fulfillment status is DELIVERED - order is completed and given to people
+   * - If INSTORE: no delivery charges, delivery fields not required, fulfillment status is CONFIRMED (use mark-collected when customer picks up)
    * - If DELIVERY: validate delivery fields (deliveryRateId, shippingAddress), set delivery cost from rate
-   * - Fulfillment status is PROCESSING (not DELIVERED)
+   * - Fulfillment status is PROCESSING
    */
   async instorePlaceOrder(
     createOrderDto: CreateOrderDto,
@@ -721,28 +703,25 @@ export class OrderService {
         `  - Total payable: ${totalPayable}`,
       );
 
-      // Generate order number
+      // Generate order number and invoice number
       const orderNumber = await this.generateOrderNumberInTransaction(transaction);
+      const invoiceNumber = await this.generateInvoiceNumber(transaction);
 
       // Set all timestamps to now for counter orders
       const now = new Date();
 
-      // Generate receipt number immediately for counter orders
-      // Note: generateReceiptNumber doesn't support transactions, but we generate it
-      // right before order creation to minimize race condition window
-      const receiptNumber = await this.generateReceiptNumber();
-
       // Determine fulfillment status based on fulfillment type
-      // DELIVERY → PROCESSING, INSTORE → DELIVERED (completed order given to people)
+      // DELIVERY → PROCESSING, INSTORE → CONFIRMED (pay now, collect later; use mark-collected when customer picks up)
       const fulfillmentStatus = createOrderDto.fulfillmentType === FulfillmentType.INSTORE
-        ? FulfillmentStatus.DELIVERED
+        ? FulfillmentStatus.CONFIRMED
         : FulfillmentStatus.PROCESSING;
 
-      // Create order projection with all timestamps set to now
+      // Create order projection with all timestamps set to now; payment summary set via createPaymentReceipt
       const order = await this.orderModel.create(
         {
           customerId: customer.id,
           orderNumber,
+          invoiceNumber,
           orderSource: OrderSource.COUNTER,
           fulfillmentType: createOrderDto.fulfillmentType,
           fulfillmentStatus,
@@ -750,8 +729,8 @@ export class OrderService {
           discount,
           totalPayable,
           voucherCode: createOrderDto.voucherCode,
-          paymentStatus: PaymentStatus.PAID, // Payment is immediately paid
-          paymentMethod: createOrderDto.paymentMethod,
+          paymentStatus: PaymentStatus.PENDING,
+          paymentMethod: null,
           deliveryCost,
           deliveryRateId: createOrderDto.deliveryRateId || null,
           deliveryLocation,
@@ -767,10 +746,10 @@ export class OrderService {
           confirmedAt: now,
           processingAt: fulfillmentStatus === FulfillmentStatus.PROCESSING ? now : null,
           shippingAt: null, // Not set for counter orders initially
-          deliveredAt: fulfillmentStatus === FulfillmentStatus.DELIVERED ? now : null,
-          paidAt: now,
-          receiptGenerated: true,
-          receiptNumber,
+          deliveredAt: null, // Set when marked collected (INSTORE) or delivered (DELIVERY)
+          paidAt: null,
+          receiptGenerated: false,
+          receiptNumber: null,
         },
         { transaction },
       );
@@ -849,6 +828,19 @@ export class OrderService {
         }
       }
 
+      // Create payment receipt (full amount) and sync order payment summary to PAID
+      // When payment method is not CASH, bankAccountId is required (enforced by CreateOrderDto)
+      await this.paymentReceiptService.createPaymentReceipt(
+        order.id,
+        {
+          amount: totalPayable,
+          paymentMethod: createOrderDto.paymentMethod,
+          paidAt: now,
+          bankAccountId: createOrderDto.paymentMethod !== PaymentMethod.CASH ? createOrderDto.bankAccountId : undefined,
+        },
+        transaction,
+      );
+
       // Reload order with relations
       const savedOrder = await this.orderModel.findByPk(order.id, {
         include: [
@@ -859,16 +851,156 @@ export class OrderService {
         transaction,
       });
 
-      // Increment product sales count for INSTORE orders since they are DELIVERED
-      if (fulfillmentStatus === FulfillmentStatus.DELIVERED) {
-        await this.incrementProductSalesCount(order.id);
-      }
+      // Product sales count incremented when marked collected (INSTORE) or delivered (DELIVERY)
 
       this.logger.log(
         `[Counter Order Created] Order ID: ${savedOrder.id}, Order Number: ${savedOrder.orderNumber}, Fulfillment Type: ${savedOrder.fulfillmentType}, Payment Status: PAID`,
       );
 
+      // Send SMS (no template): INSTORE+PAID vs DELIVERY+PAID. Fire-and-forget.
+      const orderCustomer = (savedOrder as any).customer;
+      const phone = typeof orderCustomer?.phoneNumber === 'string' ? orderCustomer.phoneNumber.trim() : null;
+      if (phone) {
+        const total = Number(savedOrder.totalPayable ?? 0).toFixed(2);
+        const isInstore = savedOrder.fulfillmentType === FulfillmentType.INSTORE;
+        const msg = isInstore
+          ? `Thank you! Your order ${savedOrder.orderNumber} totals Nu.${total}. Collect from our store at your convenience.`
+          : `Thank you! Your order ${savedOrder.orderNumber} (Nu.${total}) has been confirmed. We will deliver to your address.`;
+        this.smsService
+          .sendSmsNotification({ phoneNumber: phone, message: msg })
+          .then(() => this.logger.log(`[Instore Place Order] SMS sent to ${phone} (${isInstore ? 'INSTORE' : 'DELIVERY'}+PAID)`))
+          .catch((e) => this.logger.warn(`[Instore Place Order] SMS could not be sent: ${(e as Error)?.message ?? e}`));
+      }
+
       return savedOrder;
+    });
+  }
+
+  /**
+   * Single counter order entry: pay-now (INSTORE/DELIVERY/PICKUP) or order-to-pay-later.
+   * orderSource is forced to COUNTER.
+   * - paymentMethod + (INSTORE|DELIVERY) → instorePlaceOrder
+   * - paymentMethod + (PICKUP|undefined) → createCounterPayNowPickupLater
+   * - no paymentMethod → createCounterOrderToPayLater
+   */
+  async createCounterOrder(createOrderDto: CreateOrderDto, userId?: number): Promise<Order> {
+    const dto = { ...createOrderDto, orderSource: OrderSource.COUNTER };
+    if (dto.paymentMethod != null) {
+      if (dto.fulfillmentType === FulfillmentType.INSTORE || dto.fulfillmentType === FulfillmentType.DELIVERY) {
+        return this.instorePlaceOrder(dto, userId);
+      }
+      return this.createCounterPayNowPickupLater(dto as any, userId);
+    }
+    return this.createCounterOrderToPayLater(createOrderDto, userId);
+  }
+
+  /**
+   * Counter: Order to pay later (e.g. offices, retail shops, bulk orders).
+   * orderSource=COUNTER, paymentStatus=PENDING, no payment at placement.
+   * fulfillmentType: INSTORE (collect at shop), PICKUP (collect at shop), or DELIVERY (we deliver; pay on delivery or invoice).
+   * For DELIVERY, deliveryRateId and shippingAddress are required (enforced by CreateOrderDto).
+   */
+  async createCounterOrderToPayLater(
+    createOrderDto: CreateOrderDto,
+    userId?: number,
+  ): Promise<Order> {
+    const allowed: FulfillmentType[] = [FulfillmentType.INSTORE, FulfillmentType.PICKUP, FulfillmentType.DELIVERY];
+    const ft = createOrderDto.fulfillmentType;
+    if (!ft || !allowed.includes(ft)) {
+      throw new BadRequestException(
+        'fulfillmentType is required for order-to-pay-later and must be one of: INSTORE, PICKUP, DELIVERY.',
+      );
+    }
+    const { paymentMethod, ...rest } = createOrderDto;
+    const savedOrder = await this.createOrder({ ...rest, orderSource: OrderSource.COUNTER, fulfillmentType: ft }, userId);
+    // SMS (no template): UNPAID + DELIVERY vs UNPAID + PICKUP/INSTORE. Fire-and-forget.
+    const cust = (savedOrder as any).customer;
+    const phone = typeof cust?.phoneNumber === 'string' ? cust.phoneNumber.trim() : null;
+    if (phone) {
+      const total = Number(savedOrder.totalPayable ?? 0).toFixed(2);
+      const msg = ft === FulfillmentType.DELIVERY
+        ? `Your order ${savedOrder.orderNumber} (Nu.${total}) has been placed. Please have payment ready on delivery.`
+        : `Your order ${savedOrder.orderNumber} (Nu.${total}) has been placed. Please pay when you collect from our store.`;
+      this.smsService
+        .sendSmsNotification({ phoneNumber: phone, message: msg })
+        .then(() => this.logger.log(`[Counter Order-To-Pay-Later] SMS sent to ${phone} (UNPAID+${ft})`))
+        .catch((e) => this.logger.warn(`[Counter Order-To-Pay-Later] SMS could not be sent: ${(e as Error)?.message ?? e}`));
+    }
+    return savedOrder;
+  }
+
+  /**
+   * Counter: Pay now, collect later (PICKUP). Customer pays at counter; will come to the shop to collect.
+   * orderSource=COUNTER, fulfillmentType=PICKUP, paymentStatus=PAID, fulfillmentStatus=CONFIRMED.
+   */
+  async createCounterPayNowPickupLater(
+    dto: CounterPayNowPickupLaterDto,
+    userId?: number,
+  ): Promise<Order> {
+    const createDto: CreateOrderDto = {
+      ...dto,
+      orderSource: OrderSource.COUNTER,
+      fulfillmentType: FulfillmentType.PICKUP,
+    };
+    const order = await this.createOrder(createDto, userId);
+    const finalOrder = await this.confirmOrder(order.id, {
+      paymentMethod: dto.paymentMethod,
+      transactionId: dto.transactionId,
+      internalNotes: dto.internalNotes,
+    });
+    // SMS (no template): PICKUP+PAID. Fire-and-forget.
+    const cust = (finalOrder as any).customer;
+    const phone = typeof cust?.phoneNumber === 'string' ? cust.phoneNumber.trim() : null;
+    if (phone) {
+      const total = Number(finalOrder.totalPayable ?? 0).toFixed(2);
+      const msg = `Thank you! Your order ${finalOrder.orderNumber} (Nu.${total}) is paid. We'll have it ready for pickup at our store.`;
+      this.smsService
+        .sendSmsNotification({ phoneNumber: phone, message: msg })
+        .then(() => this.logger.log(`[Counter Pay-Now-Pickup-Later] SMS sent to ${phone}`))
+        .catch((e) => this.logger.warn(`[Counter Pay-Now-Pickup-Later] SMS could not be sent: ${(e as Error)?.message ?? e}`));
+    }
+    return finalOrder;
+  }
+
+  /**
+   * Mark a PICKUP or INSTORE order as collected (fulfillmentStatus → DELIVERED).
+   * Allowed when fulfillmentType is PICKUP or INSTORE and status is CONFIRMED or PROCESSING.
+   */
+  async markOrderAsCollected(id: number): Promise<Order> {
+    const order = await this.findOneOrder(id);
+    if (
+      order.fulfillmentType !== FulfillmentType.PICKUP &&
+      order.fulfillmentType !== FulfillmentType.INSTORE
+    ) {
+      throw new BadRequestException(
+        `markOrderAsCollected only applies to PICKUP or INSTORE. This order is ${order.fulfillmentType}. Use PATCH /orders/:id/fulfillment-status or POST /orders/:id/deliver for DELIVERY.`,
+      );
+    }
+    if (
+      order.fulfillmentStatus !== FulfillmentStatus.CONFIRMED &&
+      order.fulfillmentStatus !== FulfillmentStatus.PROCESSING
+    ) {
+      throw new BadRequestException(
+        `Order must be CONFIRMED or PROCESSING to mark as collected. Current: ${order.fulfillmentStatus}.`,
+      );
+    }
+    return this.updateFulfillmentStatus(id, { fulfillmentStatus: FulfillmentStatus.DELIVERED });
+  }
+
+  /**
+   * Mark order as CONFIRMED (fulfillmentStatus PLACED → CONFIRMED). Sets confirmedAt.
+   * Order must be in PLACED. Does not change payment status; use POST /orders/:id/confirm to confirm and record payment.
+   */
+  async markOrderAsConfirmed(id: number, internalNotes?: string): Promise<Order> {
+    const order = await this.findOneOrder(id);
+    if (order.fulfillmentStatus !== FulfillmentStatus.PLACED) {
+      throw new BadRequestException(
+        `Order must be in PLACED status to mark as confirmed. Current: ${order.fulfillmentStatus}.`,
+      );
+    }
+    return this.updateFulfillmentStatus(id, {
+      fulfillmentStatus: FulfillmentStatus.CONFIRMED,
+      internalNotes,
     });
   }
 
@@ -909,15 +1041,136 @@ export class OrderService {
   }
 
   /**
-   * Get orders paginated by fulfillment status - Admin and Staff only
+   * Get orders to confirm (PLACED + PENDING payment). Unpaginated.
+   */
+  async findOrdersToConfirm(): Promise<Order[]> {
+    return this.orderModel.findAll({
+      where: {
+        fulfillmentStatus: FulfillmentStatus.PLACED,
+       },
+      include: [
+        { model: Customer, as: 'customer' },
+        {
+          model: OrderItem,
+          as: 'orderItems',
+          include: [{ model: Product, as: 'product' }],
+        },
+        { model: OrderDiscount, as: 'orderDiscounts' },
+      ],
+      order: [['placedAt', 'DESC']],
+    });
+  }
+
+  /**
+   * Get orders to deliver (DELIVERY + SHIPPING – out for delivery to customer's address, to be marked delivered). Unpaginated.
+   */
+  async findOrdersToDeliver(): Promise<Order[]> {
+    return this.orderModel.findAll({
+      where: {
+        fulfillmentType: FulfillmentType.DELIVERY,
+        fulfillmentStatus: { [Op.in]: [FulfillmentStatus.CONFIRMED, FulfillmentStatus.PROCESSING,FulfillmentStatus.PLACED] },
+      },
+      include: [
+        { model: Customer, as: 'customer' },
+        {
+          model: OrderItem,
+          as: 'orderItems',
+          include: [{ model: Product, as: 'product' }],
+        },
+        { model: OrderDiscount, as: 'orderDiscounts' },
+      ],
+      order: [['shippingAt', 'ASC'], ['placedAt', 'DESC']],
+    });
+  }
+
+  /**
+   * Get orders ready for pickup (PICKUP or INSTORE + CONFIRMED or PROCESSING – customer to collect from store). Unpaginated.
+   * Use POST /orders/:id/mark-collected when the customer picks up.
+   */
+  async findOrdersReadyForPickup(): Promise<Order[]> {
+    return this.orderModel.findAll({
+      where: {
+        fulfillmentType: { [Op.in]: [FulfillmentType.PICKUP] },
+        fulfillmentStatus: { [Op.in]: [FulfillmentStatus.CONFIRMED, FulfillmentStatus.PROCESSING] },
+      },
+      include: [
+        { model: Customer, as: 'customer' },
+        {
+          model: OrderItem,
+          as: 'orderItems',
+          include: [{ model: Product, as: 'product' }],
+        },
+        { model: OrderDiscount, as: 'orderDiscounts' },
+      ],
+      order: [['placedAt', 'ASC'], ['id', 'ASC']],
+    });
+  }
+
+  /**
+   * Get orders to track (DELIVERY + SHIPPING – out for delivery / in transit). Unpaginated.
+   * Use: Orders currently being delivered, e.g. for tracking dashboard or customer tracking view.
+   */
+  async findOrdersToTrack(): Promise<Order[]> {
+    return this.orderModel.findAll({
+      where: {
+        fulfillmentType: FulfillmentType.DELIVERY,
+        fulfillmentStatus: FulfillmentStatus.SHIPPING,
+      },
+      include: [
+        { model: Customer, as: 'customer' },
+        {
+          model: OrderItem,
+          as: 'orderItems',
+          include: [{ model: Product, as: 'product' }],
+        },
+        { model: OrderDiscount, as: 'orderDiscounts' },
+      ],
+      order: [['shippingAt', 'ASC'], ['placedAt', 'DESC']],
+    });
+  }
+
+  /**
+   * Get orders paginated with filters - Admin and Staff only.
+   * Supports paymentStatus, orderSource, fulfillmentType, placedAtFrom/To for phase views
+   * (Delivered & Paid, Collection Gap, month/date filters).
    */
   async getOrdersPaginated(queryDto: GetOrdersPaginatedQueryDto): Promise<PaginatedResponseDto<Order>> {
-    const { fulfillmentStatus } = queryDto;
+    const {
+      fulfillmentStatus,
+      paymentStatus,
+      orderSource,
+      fulfillmentType,
+      placedAtFrom,
+      placedAtTo,
+    } = queryDto;
     const { page, limit, offset } = this.paginationService.normalizePagination(queryDto);
 
     const where: any = {};
     if (fulfillmentStatus) {
       where.fulfillmentStatus = fulfillmentStatus;
+    }
+    if (paymentStatus) {
+      where.paymentStatus = paymentStatus;
+    }
+    if (orderSource) {
+      where.orderSource = orderSource;
+    }
+    if (fulfillmentType) {
+      where.fulfillmentType = fulfillmentType;
+    }
+    if (placedAtFrom || placedAtTo) {
+      where.placedAt = {};
+      if (placedAtFrom) {
+        where.placedAt[Op.gte] = new Date(placedAtFrom);
+      }
+      if (placedAtTo) {
+        // Include full day: treat YYYY-MM-DD as end-of-day UTC
+        const toDate =
+          placedAtTo.includes('T') || placedAtTo.includes(' ')
+            ? new Date(placedAtTo)
+            : new Date(placedAtTo + 'T23:59:59.999Z');
+        where.placedAt[Op.lte] = toDate;
+      }
     }
 
     const { count, rows } = await this.orderModel.findAndCountAll({
@@ -938,6 +1191,221 @@ export class OrderService {
 
     return this.paginationService.createPaginatedResponse(
       rows.map((order) => order.toJSON()),
+      count,
+      { page, limit },
+    );
+  }
+
+  /**
+   * Get phase counts for admin tab badges (Pending Action, In Progress, Collection Gap, Completed).
+   * Filters match ORDER_MANAGEMENT_ADMIN_UI_SUGGESTIONS.md §2.2.
+   */
+  async getAdminPhaseCounts(): Promise<{
+    pendingAction: number;
+    inProgress: number;
+    collectionGap: number;
+    completed: number;
+  }> {
+    const [pendingAction, inProgress, collectionGap, completed] = await Promise.all([
+      this.orderModel.count({
+        where: {
+          [Op.or]: [
+            {
+              fulfillmentStatus: FulfillmentStatus.PLACED,
+              paymentStatus: PaymentStatus.PENDING,
+            },
+            {
+              fulfillmentStatus: { [Op.in]: [FulfillmentStatus.CONFIRMED, FulfillmentStatus.PROCESSING] },
+              paymentStatus: { [Op.in]: [PaymentStatus.PAID, PaymentStatus.PENDING] },
+            },
+          ],
+        },
+      }),
+      this.orderModel.count({
+        where: { fulfillmentStatus: FulfillmentStatus.SHIPPING },
+      }),
+      this.orderModel.count({
+        where: {
+          [Op.or]: [
+            {
+              fulfillmentStatus: FulfillmentStatus.DELIVERED,
+              paymentStatus: { [Op.in]: [PaymentStatus.PENDING, PaymentStatus.PARTIAL] },
+            },
+            {
+              paymentStatus: PaymentStatus.PARTIAL,
+              fulfillmentStatus: {
+                [Op.in]: [
+                  FulfillmentStatus.PLACED,
+                  FulfillmentStatus.CONFIRMED,
+                  FulfillmentStatus.PROCESSING,
+                  FulfillmentStatus.SHIPPING,
+                ],
+              },
+            },
+          ],
+        },
+      }),
+      this.orderModel.count({
+        where: {
+          [Op.or]: [
+            {
+              fulfillmentStatus: FulfillmentStatus.DELIVERED,
+              paymentStatus: PaymentStatus.PAID,
+            },
+            { fulfillmentStatus: FulfillmentStatus.CANCELED },
+          ],
+        },
+      }),
+    ]);
+    return { pendingAction, inProgress, collectionGap, completed };
+  }
+
+  /**
+   * Active Workflow: To Process.
+   * Unpaid & Not Delivered: (PLACED | CONFIRMED) + (PENDING | PARTIAL).
+   * Primary action: Record Payment / Confirm Order.
+   * Unpaginated; for GET /orders/admin/to-process.
+   */
+  async findOrdersToProcess(): Promise<Order[]> {
+    return this.orderModel.findAll({
+      where: {
+        fulfillmentStatus: { [Op.in]: [FulfillmentStatus.PLACED] },
+        paymentStatus: { [Op.in]: [PaymentStatus.PENDING, PaymentStatus.PARTIAL] },
+      },
+      include: [
+        { model: Customer, as: 'customer' },
+        { model: OrderItem, as: 'orderItems', include: [{ model: Product, as: 'product' }] },
+        { model: OrderDiscount, as: 'orderDiscounts' },
+      ],
+      order: [['placedAt', 'DESC']],
+    });
+  }
+
+  /**
+   * Active Workflow: To Deliver.
+   * Paid & Not Delivered: (CONFIRMED | PROCESSING) + PAID.
+   * Primary action: Ship Order (Assign Driver).
+    */
+  async findOrdersReadyToShip(): Promise<Order[]> {
+    return this.orderModel.findAll({
+      where: {
+        fulfillmentStatus: { [Op.in]: [FulfillmentStatus.CONFIRMED, FulfillmentStatus.PROCESSING] },
+        fulfillmentType: FulfillmentType.PICKUP,
+       },
+      include: [
+        { model: Customer, as: 'customer' },
+        { model: OrderItem, as: 'orderItems', include: [{ model: Product, as: 'product' }] },
+        { model: OrderDiscount, as: 'orderDiscounts' },
+      ],
+      order: [['placedAt', 'DESC']],
+    });
+  }
+
+  /**
+   * Active Workflow: Unpaid Delivery.
+   * Delivered but Unpaid: DELIVERED + (PENDING | PARTIAL).
+   * Primary action: Record Final Payment.
+   * Unpaginated; for GET /orders/admin/unpaid-delivery.
+   */
+  async findOrdersUnpaidDelivery(): Promise<Order[]> {
+    return this.orderModel.findAll({
+      where: {
+        fulfillmentStatus: FulfillmentStatus.DELIVERED,
+        paymentStatus: { [Op.in]: [PaymentStatus.PENDING, PaymentStatus.PARTIAL] },
+      },
+      include: [
+        { model: Customer, as: 'customer' },
+        { model: OrderItem, as: 'orderItems', include: [{ model: Product, as: 'product' }] },
+        { model: OrderDiscount, as: 'orderDiscounts' },
+      ],
+      order: [['deliveredAt', 'DESC'], ['placedAt', 'DESC']],
+    });
+  }
+
+  /**
+   * History: Completed. DELIVERED + PAID, filtered by deliveredAt.
+   * Default date range: current month. Paginated.
+   * For GET /orders/admin/completed.
+   */
+  async getOrdersCompleted(query: GetOrdersCompletedQueryDto): Promise<PaginatedResponseDto<Order>> {
+    const { page, limit, offset } = this.paginationService.normalizePagination(query);
+    let deliveredAtFrom = query.deliveredAtFrom ? new Date(query.deliveredAtFrom) : null;
+    let deliveredAtTo = query.deliveredAtTo ? new Date(query.deliveredAtTo) : null;
+
+    if (!deliveredAtFrom || !deliveredAtTo) {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = now.getMonth();
+      deliveredAtFrom = deliveredAtFrom ?? new Date(y, m, 1, 0, 0, 0, 0);
+      deliveredAtTo = deliveredAtTo ?? new Date(y, m + 1, 0, 23, 59, 59, 999);
+    } else if (!query.deliveredAtTo?.includes('T') && !query.deliveredAtTo?.includes(' ')) {
+      deliveredAtTo = new Date(query.deliveredAtTo + 'T23:59:59.999Z');
+    }
+
+    const where: any = {
+      fulfillmentStatus: FulfillmentStatus.DELIVERED,
+      paymentStatus: PaymentStatus.PAID,
+      deliveredAt: { [Op.gte]: deliveredAtFrom, [Op.lte]: deliveredAtTo },
+    };
+
+    const { count, rows } = await this.orderModel.findAndCountAll({
+      where,
+      include: [
+        { model: Customer, as: 'customer' },
+        { model: OrderItem, as: 'orderItems', include: [{ model: Product, as: 'product' }] },
+        { model: OrderDiscount, as: 'orderDiscounts' },
+      ],
+      order: [['deliveredAt', 'DESC'], ['placedAt', 'DESC']],
+      limit,
+      offset,
+    });
+
+    return this.paginationService.createPaginatedResponse(
+      rows.map((o) => o.toJSON()),
+      count,
+      { page, limit },
+    );
+  }
+
+  /**
+   * History: Cancelled. CANCELED, filtered by updatedAt.
+   * Default date range: current month. Paginated.
+   * For GET /orders/admin/cancelled.
+   */
+  async getOrdersCancelled(query: GetOrdersCancelledQueryDto): Promise<PaginatedResponseDto<Order>> {
+    const { page, limit, offset } = this.paginationService.normalizePagination(query);
+    let updatedAtFrom = query.updatedAtFrom ? new Date(query.updatedAtFrom) : null;
+    let updatedAtTo = query.updatedAtTo ? new Date(query.updatedAtTo) : null;
+
+    if (!updatedAtFrom || !updatedAtTo) {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = now.getMonth();
+      updatedAtFrom = updatedAtFrom ?? new Date(y, m, 1, 0, 0, 0, 0);
+      updatedAtTo = updatedAtTo ?? new Date(y, m + 1, 0, 23, 59, 59, 999);
+    } else if (!query.updatedAtTo?.includes('T') && !query.updatedAtTo?.includes(' ')) {
+      updatedAtTo = new Date(query.updatedAtTo + 'T23:59:59.999Z');
+    }
+
+    const where: any = {
+      fulfillmentStatus: FulfillmentStatus.CANCELED,
+      updatedAt: { [Op.gte]: updatedAtFrom, [Op.lte]: updatedAtTo },
+    };
+
+    const { count, rows } = await this.orderModel.findAndCountAll({
+      where,
+      include: [
+        { model: Customer, as: 'customer' },
+        { model: OrderItem, as: 'orderItems', include: [{ model: Product, as: 'product' }] },
+        { model: OrderDiscount, as: 'orderDiscounts' },
+      ],
+      order: [['updatedAt', 'DESC'], ['placedAt', 'DESC']],
+      limit,
+      offset,
+    });
+
+    return this.paginationService.createPaginatedResponse(
+      rows.map((o) => o.toJSON()),
       count,
       { page, limit },
     );
@@ -992,7 +1460,6 @@ export class OrderService {
             include: [Product],
           },
           { model: OrderDiscount, as: 'orderDiscounts' },
-          { model: Transaction, include: [ChartOfAccounts] },
         ],
         order: [['placedAt', 'DESC']],
       });
@@ -1031,7 +1498,6 @@ export class OrderService {
             include: [Product],
           },
           { model: OrderDiscount, as: 'orderDiscounts' },
-          { model: Transaction, include: [ChartOfAccounts] },
         ],
         order: [['placedAt', 'DESC']],
       });
@@ -1225,7 +1691,7 @@ export class OrderService {
     let statusChanged = false;
 
     if (updateOrderStatusDto.fulfillmentStatus) {
-      this.validateStatusTransition(order.fulfillmentStatus, updateOrderStatusDto.fulfillmentStatus);
+      this.validateStatusTransition(order.fulfillmentStatus, updateOrderStatusDto.fulfillmentStatus, order.fulfillmentType);
       updateData.fulfillmentStatus = updateOrderStatusDto.fulfillmentStatus;
       statusChanged = true;
 
@@ -1237,9 +1703,29 @@ export class OrderService {
     }
 
     if (updateOrderStatusDto.paymentStatus) {
-      updateData.paymentStatus = updateOrderStatusDto.paymentStatus;
-      if (updateOrderStatusDto.paymentStatus === PaymentStatus.PAID && !order.paidAt) {
-        updateData.paidAt = new Date();
+      // When moving to PAID: create PaymentReceipt for remaining and sync order (do not set payment fields in updateData)
+      if (updateOrderStatusDto.paymentStatus === PaymentStatus.PAID) {
+        const totalPayable = parseFloat(String(order.totalPayable));
+        const totalPaid = await this.paymentReceiptService.getTotalPaidForOrder(id);
+        const remaining = totalPayable - totalPaid;
+        if (remaining > 0) {
+          const method = updateOrderStatusDto.paymentMethod || order.paymentMethod;
+          if (!method) {
+            throw new BadRequestException('paymentMethod is required when setting payment status to PAID (to record the payment)');
+          }
+          const paidAt = updateOrderStatusDto.paidAt ? new Date(updateOrderStatusDto.paidAt) : new Date();
+          await this.paymentReceiptService.createPaymentReceipt(id, {
+            amount: remaining,
+            paymentMethod: method,
+            paidAt,
+            notes: updateOrderStatusDto.internalNotes,
+          });
+        }
+        // Payment fields are set by createPaymentReceipt/sync; do not add to updateData
+      } else {
+        updateData.paymentStatus = updateOrderStatusDto.paymentStatus;
+        updateData.paidAt = null;
+        updateData.paymentMethod = updateOrderStatusDto.paymentMethod || order.paymentMethod;
       }
       statusChanged = true;
     }
@@ -1251,32 +1737,7 @@ export class OrderService {
     }
 
     await order.update(updateData);
-    const updatedOrder = await this.findOneOrder(id);
-
-    // Create accounting entries when payment status moves to PAID
-    if (
-      updateOrderStatusDto.paymentStatus === PaymentStatus.PAID &&
-      order.paymentStatus !== PaymentStatus.PAID
-    ) {
-      // Ensure receipt is generated before creating transactions
-      if (!updatedOrder.receiptGenerated) {
-        const receiptNumber = await this.generateReceiptNumber();
-        await updatedOrder.update({
-          receiptGenerated: true,
-          receiptNumber,
-        });
-        // Reload to get updated receipt number
-        const reloadedOrder = await this.findOneOrder(id);
-        await this.accountsService.createAccountingEntriesForOrder(reloadedOrder);
-      } else {
-        await this.accountsService.createAccountingEntriesForOrder(updatedOrder);
-      }
-    }
-
-    // SMS notifications are handled via templates in CQRS handlers
-    // No direct SMS sending - all SMS goes through template system and outbox processor
-
-    return updatedOrder;
+    return this.findOneOrder(id);
   }
 
   async processPayment(
@@ -1338,43 +1799,15 @@ export class OrderService {
     const updatedOrder = await this.updatePaymentStatus(id, {
       paymentStatus: PaymentStatus.PAID,
       paymentMethod: processPaymentDto.paymentMethod,
+      paidAt: processPaymentDto.paymentDate,
+      internalNotes: processPaymentDto.internalNotes,
     });
 
     this.logger.log(
       `[Process Payment] Payment status updated successfully`,
     );
 
-    // Update additional fields that aren't in the command
-    if (processPaymentDto.paymentDate || processPaymentDto.internalNotes) {
-      const updateData: any = {};
-      if (processPaymentDto.paymentDate) {
-        updateData.paidAt = paymentDate;
-      }
-      if (processPaymentDto.internalNotes) {
-        updateData.internalNotes = processPaymentDto.internalNotes
-          ? `${updatedOrder.internalNotes || ''}\nPayment Note: ${processPaymentDto.internalNotes}`.trim()
-          : updatedOrder.internalNotes;
-      }
-      if (Object.keys(updateData).length > 0) {
-        await this.orderModel.update(updateData, { where: { id } });
-      }
-    }
-
-    // Generate receipt if not already generated
-    const reloadedOrder = await this.findOneOrder(id);
-    if (!reloadedOrder.receiptGenerated) {
-      const receiptNumber = await this.generateReceiptNumber();
-      await reloadedOrder.update({
-        receiptGenerated: true,
-        receiptNumber,
-      });
-    }
-
-    // Create double-entry accounting transactions
-    const finalOrder = await this.findOneOrder(id);
-    await this.accountsService.createAccountingEntriesForOrder(finalOrder);
-
-    return finalOrder;
+    return this.findOneOrder(id);
   }
 
 
@@ -1426,6 +1859,12 @@ export class OrderService {
     if (order.fulfillmentStatus === updateFulfillmentStatusDto.fulfillmentStatus) {
       return order; // No change needed
     }
+
+    this.validateStatusTransition(
+      order.fulfillmentStatus,
+      updateFulfillmentStatusDto.fulfillmentStatus,
+      order.fulfillmentType,
+    );
 
     return this.sequelize.transaction(async (transaction) => {
       const now = new Date();
@@ -1631,10 +2070,35 @@ export class OrderService {
       this.logger.log(`[Update Payment Status] Previous Payment Status: ${previousPaymentStatus}`);
       this.logger.log(`[Update Payment Status] Payment Status Changed: ${previousPaymentStatus} → ${updatePaymentStatusDto.paymentStatus}`);
 
-      // Determine if fulfillment status should change to CONFIRMED
+      // When moving to PAID: create PaymentReceipt for remaining amount (if any) and sync order
+      if (updatePaymentStatusDto.paymentStatus === PaymentStatus.PAID) {
+        const totalPayable = parseFloat(String(order.totalPayable));
+        const totalPaid = await this.paymentReceiptService.getTotalPaidForOrder(id, transaction);
+        const remaining = totalPayable - totalPaid;
+
+        if (remaining > 0) {
+          const method = updatePaymentStatusDto.paymentMethod || order.paymentMethod;
+          if (!method) {
+            throw new BadRequestException('paymentMethod is required when recording a payment to set status PAID');
+          }
+          const paidAt = updatePaymentStatusDto.paidAt ? new Date(updatePaymentStatusDto.paidAt) : now;
+          await this.paymentReceiptService.createPaymentReceipt(
+            id,
+            {
+              amount: remaining,
+              paymentMethod: method,
+              paidAt,
+              transactionId: updatePaymentStatusDto.transactionId,
+              notes: updatePaymentStatusDto.internalNotes,
+            },
+            transaction,
+          );
+        }
+      }
+
+      // Fulfillment: when PAID and PLACED -> CONFIRMED
       let newFulfillmentStatus = order.fulfillmentStatus;
       let confirmedAt = order.confirmedAt;
-      
       if (
         updatePaymentStatusDto.paymentStatus === PaymentStatus.PAID &&
         order.fulfillmentStatus === FulfillmentStatus.PLACED
@@ -1644,18 +2108,16 @@ export class OrderService {
         this.logger.log(`[Update Payment Status] Payment is PAID and order is PLACED → Auto-updating fulfillment to CONFIRMED`);
       }
 
-      // Update order with new statuses and timestamps
+      // Build updateData: for PAID, payment fields come from createPaymentReceipt/sync; only fulfillment+confirmedAt
+      const updateData: any = { fulfillmentStatus: newFulfillmentStatus, confirmedAt };
+      if (updatePaymentStatusDto.paymentStatus !== PaymentStatus.PAID) {
+        updateData.paymentStatus = updatePaymentStatusDto.paymentStatus;
+        updateData.paidAt = null;
+        updateData.paymentMethod = updatePaymentStatusDto.paymentMethod || order.paymentMethod;
+      }
+
       this.logger.log(`[Update Payment Status] Updating order with new statuses...`);
-      await order.update(
-        {
-          paymentStatus: updatePaymentStatusDto.paymentStatus,
-          fulfillmentStatus: newFulfillmentStatus,
-          paymentMethod: updatePaymentStatusDto.paymentMethod || order.paymentMethod,
-          paidAt: updatePaymentStatusDto.paymentStatus === PaymentStatus.PAID ? now : order.paidAt,
-          confirmedAt: confirmedAt,
-        },
-        { transaction },
-      );
+      await order.update(updateData, { transaction });
 
       const savedOrder = await this.orderModel.findByPk(order.id, {
         include: [{ model: Customer, as: 'customer' }],
@@ -1669,7 +2131,7 @@ export class OrderService {
       // Determine trigger event for SMS based on both payment and fulfillment status changes
       const oldFulfillmentStatus = order.fulfillmentStatus;
       const updatedFulfillmentStatus = savedOrder.fulfillmentStatus;
-      
+
       const trigger = this.smsTriggerService.getTriggerEvent(
         oldFulfillmentStatus,
         updatedFulfillmentStatus,
@@ -1677,46 +2139,18 @@ export class OrderService {
         updatePaymentStatusDto.paymentStatus,
       );
 
-      if (trigger) {
+      // Skip SMS templates for COUNTER; counter flows use their own non-template SMS.
+      if (trigger && savedOrder.orderSource !== OrderSource.COUNTER) {
         this.logger.log(`[Update Payment Status] Triggering SMS templates with event: ${trigger}`);
-        this.logger.log(`[Update Payment Status]   Payment Status: ${previousPaymentStatus} → ${updatePaymentStatusDto.paymentStatus}`);
-        this.logger.log(`[Update Payment Status]   Fulfillment Status: ${oldFulfillmentStatus} → ${updatedFulfillmentStatus}`);
-        
         this.smsTriggerService
           .processSmsTemplates(savedOrder, trigger)
-          .then(() => {
-            this.logger.log(`[Update Payment Status] ✅ Successfully queued SMS templates for order ${savedOrder.id}`);
-          })
-          .catch((error) => {
-            this.logger.error(`[Update Payment Status] ❌ Failed to process SMS templates for order ${savedOrder.id}: ${error.message || error}`, error.stack);
-          });
-      } else {
-        this.logger.log(`[Update Payment Status] ⚠️  No SMS trigger event for status changes:`);
-        this.logger.log(`[Update Payment Status]   Payment: ${previousPaymentStatus} → ${updatePaymentStatusDto.paymentStatus}`);
-        this.logger.log(`[Update Payment Status]   Fulfillment: ${oldFulfillmentStatus} → ${updatedFulfillmentStatus}`);
+          .then(() => this.logger.log(`[Update Payment Status] ✅ Queued SMS templates for order ${savedOrder.id}`))
+          .catch((e) => this.logger.error(`[Update Payment Status] ❌ order ${savedOrder.id}: ${(e as Error)?.message}`, (e as Error)?.stack));
+      } else if (!trigger) {
+        this.logger.log(`[Update Payment Status] ⚠️  No SMS trigger event for status changes`);
       }
 
       this.logger.log(`[Update Payment Status] ========================================`);
-
-      // Handle accounting side effects (create accounting entries) - after transaction
-      if (
-        oldStatus !== PaymentStatus.PAID &&
-        updatePaymentStatusDto.paymentStatus === PaymentStatus.PAID
-      ) {
-        // Ensure receipt is generated before creating transactions
-        if (!savedOrder.receiptGenerated) {
-          const receiptNumber = await this.generateReceiptNumber();
-          await savedOrder.update({
-            receiptGenerated: true,
-            receiptNumber,
-          });
-          const reloadedOrder = await this.findOneOrder(id);
-          await this.accountsService.createAccountingEntriesForOrder(reloadedOrder);
-        } else {
-          await this.accountsService.createAccountingEntriesForOrder(savedOrder);
-        }
-      }
-
       return savedOrder;
     });
   }
@@ -1774,7 +2208,6 @@ export class OrderService {
     });
 
     // Update internal notes separately if provided
-    // (updatePaymentStatus doesn't update internalNotes in the order record)
     if (confirmOrderDto.internalNotes) {
       const notesUpdate = `${order.internalNotes || ''}\nOrder Confirmed: ${confirmOrderDto.internalNotes}`.trim();
       await updatedOrder.update({
@@ -1783,7 +2216,6 @@ export class OrderService {
     }
 
     const finalOrder = await this.findOneOrder(id);
-
     this.logger.log(
       `[Confirm Order] Order ${finalOrder.orderNumber} confirmed successfully`,
     );
@@ -1828,21 +2260,13 @@ export class OrderService {
 
     // Validate order is in a valid status for shipping (CONFIRMED or PROCESSING)
     if (
-      order.fulfillmentStatus !== FulfillmentStatus.CONFIRMED &&
-      order.fulfillmentStatus !== FulfillmentStatus.PROCESSING
-    ) {
+      order.fulfillmentStatus === FulfillmentStatus.SHIPPING || order.fulfillmentStatus === FulfillmentStatus.CANCELED
+     ) {
       throw new BadRequestException(
-        `Cannot ship order. Order must be in CONFIRMED or PROCESSING status. Current status: ${order.fulfillmentStatus}`,
+        `Cannot ship order. Order is already ${order.fulfillmentStatus}`,
       );
     }
-
-    // Validate payment is PAID before shipping
-    if (order.paymentStatus !== PaymentStatus.PAID) {
-      throw new BadRequestException(
-        `Cannot ship order. Payment must be PAID. Current payment status: ${order.paymentStatus}`,
-      );
-    }
-
+ 
     this.logger.log(
       `[Ship Order] Order ${order.orderNumber} is valid for shipping`,
     );
@@ -1993,47 +2417,32 @@ export class OrderService {
       );
     }
 
-    const updateData: any = {
-      paymentMethod: updatePaymentMethodDto.paymentMethod,
-    };
-
-    // If ZPSS is selected, auto-verify and set to PAID
+    // If ZPSS is selected, auto-verify and set to PAID via updatePaymentStatus (creates PaymentReceipt and syncs)
     if (updatePaymentMethodDto.paymentMethod === PaymentMethod.ZPSS) {
-      updateData.paymentStatus = PaymentStatus.PAID;
-      updateData.verifiedAt = new Date();
-      updateData.paidAt = new Date();
-
-      // Generate receipt
-      if (!order.receiptGenerated) {
-        const receiptNumber = await this.generateReceiptNumber();
-        updateData.receiptGenerated = true;
-        updateData.receiptNumber = receiptNumber;
+      this.logger.log(
+        `[Update Payment Method] ZPSS payment method selected - auto-setting payment to PAID`,
+      );
+      const paidOrder = await this.updatePaymentStatus(id, {
+        paymentStatus: PaymentStatus.PAID,
+        paymentMethod: PaymentMethod.ZPSS,
+      });
+      if (updatePaymentMethodDto.internalNotes) {
+        await paidOrder.update({
+          internalNotes: `${paidOrder.internalNotes || ''}\nPayment Method Updated: ${updatePaymentMethodDto.internalNotes}`.trim(),
+        });
       }
+      return this.findOneOrder(id);
     }
 
+    // Non-ZPSS: just update payment method and optional notes
+    const updateData: any = { paymentMethod: updatePaymentMethodDto.paymentMethod };
     if (updatePaymentMethodDto.internalNotes) {
       updateData.internalNotes = updatePaymentMethodDto.internalNotes
         ? `${order.internalNotes || ''}\nPayment Method Updated: ${updatePaymentMethodDto.internalNotes}`.trim()
         : order.internalNotes;
     }
-
     await order.update(updateData);
-    const updatedOrder = await this.findOneOrder(id);
-
-    // If ZPSS, update payment status to PAID (triggers SMS templates)
-    if (updatePaymentMethodDto.paymentMethod === PaymentMethod.ZPSS) {
-      this.logger.log(
-        `[Update Payment Method] ZPSS payment method selected - auto-setting payment to PAID`,
-      );
-      // Use updatePaymentStatus to trigger SMS templates
-      const paidOrder = await this.updatePaymentStatus(id, {
-        paymentStatus: PaymentStatus.PAID,
-        paymentMethod: PaymentMethod.ZPSS,
-      });
-      return paidOrder;
-    }
-
-    return updatedOrder;
+    return this.findOneOrder(id);
   }
 
   async verifyOrder(id: number, verifyOrderDto: VerifyOrderDto): Promise<Order> {
@@ -2073,28 +2482,24 @@ export class OrderService {
       });
     }
 
-    // Generate receipt if not already generated
-    const reloadedOrder = await this.findOneOrder(id);
-    if (!reloadedOrder.receiptGenerated) {
-      const receiptNumber = await this.generateReceiptNumber();
-      await reloadedOrder.update({
-        receiptGenerated: true,
-        receiptNumber,
-      });
-    }
-
-    // Create accounting entries
-    const finalOrder = await this.findOneOrder(id);
-    await this.accountsService.createAccountingEntriesForOrder(finalOrder);
-
-    return finalOrder;
+    return this.findOneOrder(id);
   }
 
   // Workflow Logic Methods
   private validateStatusTransition(
     currentStatus: FulfillmentStatus,
     newStatus: FulfillmentStatus,
+    fulfillmentType?: FulfillmentType,
   ): void {
+    // PICKUP/INSTORE: customer collects at shop; CONFIRMED or PROCESSING → DELIVERED is allowed
+    if (
+      newStatus === FulfillmentStatus.DELIVERED &&
+      (fulfillmentType === FulfillmentType.PICKUP || fulfillmentType === FulfillmentType.INSTORE) &&
+      (currentStatus === FulfillmentStatus.CONFIRMED || currentStatus === FulfillmentStatus.PROCESSING)
+    ) {
+      return;
+    }
+
     const validTransitions: Record<FulfillmentStatus, FulfillmentStatus[]> = {
       [FulfillmentStatus.PLACED]: [FulfillmentStatus.CONFIRMED, FulfillmentStatus.CANCELED],
       [FulfillmentStatus.CONFIRMED]: [
@@ -2185,11 +2590,13 @@ export class OrderService {
   async cancelOrder(id: number, reason?: string): Promise<Order> {
     const order = await this.findOneOrder(id);
 
-    if (
-      order.fulfillmentStatus === FulfillmentStatus.DELIVERED
-    ) {
-      // If order is delivered, create reversal entries
-      await this.accountsService.createReversalEntriesForOrder(order, reason);
+    if (order.fulfillmentStatus === FulfillmentStatus.CANCELED) {
+      return this.findOneOrder(id);
+    }
+    if (order.fulfillmentStatus === FulfillmentStatus.DELIVERED) {
+      throw new BadRequestException(
+        'Cannot cancel an order that has been delivered.',
+      );
     }
 
     const now = new Date();
@@ -2374,6 +2781,104 @@ export class OrderService {
     }
 
     return statistics;
+  }
+
+  /**
+   * Monthly report: total orders (status !== PLACED), revenue (from PAID orders), total to collect (PENDING/PARTIAL).
+   */
+  async getOrderMonthlyReport(
+    monthQuery: MonthQueryDto,
+  ): Promise<OrderMonthlyReportResponseDto> {
+    const { year, month } = monthQuery;
+    const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+    const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+
+    const orders = await this.orderModel.findAll({
+      where: {
+        placedAt: { [Op.gte]: startDate, [Op.lte]: endDate },
+        fulfillmentStatus: { [Op.ne]: FulfillmentStatus.PLACED },
+      },
+      attributes: ['id', 'totalPayable', 'paymentStatus'],
+    });
+
+    let revenue = 0;
+    let totalToCollect = 0;
+
+    for (const order of orders) {
+      const totalPayable = parseFloat(order.totalPayable.toString());
+      if (order.paymentStatus === PaymentStatus.PAID) {
+        revenue += totalPayable;
+      } else if (
+        order.paymentStatus === PaymentStatus.PENDING ||
+        order.paymentStatus === PaymentStatus.PARTIAL
+      ) {
+        const paid = await this.paymentReceiptService.getTotalPaidForOrder(
+          order.id,
+        );
+        totalToCollect += totalPayable - paid;
+      }
+    }
+
+    return {
+      year,
+      month,
+      totalOrders: orders.length,
+      revenue,
+      totalToCollect,
+    };
+  }
+
+  /**
+   * Daily stats: total orders (status !== PLACED), revenue, total to collect for one day.
+   */
+  async getOrderDailyStats(dateStr: string): Promise<OrderDailyStatsResponseDto> {
+    const startDate = new Date(`${dateStr}T00:00:00.000Z`);
+    const endDate = new Date(`${dateStr}T23:59:59.999Z`);
+
+    const orders = await this.orderModel.findAll({
+      where: {
+        placedAt: { [Op.gte]: startDate, [Op.lte]: endDate },
+        fulfillmentStatus: { [Op.ne]: FulfillmentStatus.PLACED },
+      },
+      attributes: ['id', 'totalPayable', 'paymentStatus'],
+    });
+
+    let revenue = 0;
+    let totalToCollect = 0;
+
+    for (const order of orders) {
+      const totalPayable = parseFloat(order.totalPayable.toString());
+      if (order.paymentStatus === PaymentStatus.PAID) {
+        revenue += totalPayable;
+      } else if (
+        order.paymentStatus === PaymentStatus.PENDING ||
+        order.paymentStatus === PaymentStatus.PARTIAL
+      ) {
+        const paid = await this.paymentReceiptService.getTotalPaidForOrder(
+          order.id,
+        );
+        totalToCollect += totalPayable - paid;
+      }
+    }
+
+    return {
+      date: dateStr,
+      totalOrders: orders.length,
+      revenue,
+      totalToCollect,
+    };
+  }
+
+  /**
+   * Yearly report: all 12 monthly reports for the given year (orders ≠ PLACED, revenue, total to collect).
+   */
+  async getOrderYearlyReport(year: number): Promise<OrderYearlyReportResponseDto> {
+    const monthlyReports = [];
+    for (let month = 1; month <= 12; month++) {
+      const report = await this.getOrderMonthlyReport({ year, month });
+      monthlyReports.push(report);
+    }
+    return { year, monthlyReports };
   }
 }
 

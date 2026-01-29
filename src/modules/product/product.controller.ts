@@ -48,16 +48,16 @@ export class ProductController {
   // ProductImage endpoints - Must come before generic :id routes
   @Post(':id/images')
   @UseInterceptors(
-    FilesInterceptor('images', 10, {
+    FilesInterceptor('images', 20, {
       storage,
       fileFilter: (req, file, callback) => {
-        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif)$/)) {
+        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
           return callback(new Error('Only image files are allowed!'), false);
         }
         callback(null, true);
       },
       limits: {
-        fileSize: 5 * 1024 * 1024, // 5MB limit
+        fileSize: 100 * 1024 * 1024, // 100MB per file (no practical limit for images)
       },
     }),
   )

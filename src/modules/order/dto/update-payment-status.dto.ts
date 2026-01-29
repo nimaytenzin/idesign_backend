@@ -22,5 +22,9 @@ export class UpdatePaymentStatusDto {
   @IsString()
   @IsOptional()
   internalNotes?: string;
+
+  @IsString()
+  @IsOptional()
+  paidAt?: string;
 }
 

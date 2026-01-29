@@ -3,7 +3,9 @@ import { InjectModel } from '@nestjs/sequelize';
 import { Op } from 'sequelize';
 import { CalendarEvent } from './entities/calendar-event.entity';
 import { User } from '../../auth/entities/user.entity';
+import { RecurrenceType } from './entities/recurrence-type.enum';
 import { CreateCalendarEventDto } from './dto/create-calendar-event.dto';
+import { CreateRecurringCalendarEventDto } from './dto/create-recurring-calendar-event.dto';
 import { UpdateCalendarEventDto } from './dto/update-calendar-event.dto';
 import { CalendarEventQueryDto } from './dto/calendar-event-query.dto';
 import { CalendarEventResponseDto } from './dto/calendar-event-response.dto';
@@ -14,6 +16,145 @@ export class CalendarEventService {
     @InjectModel(CalendarEvent)
     private calendarEventModel: typeof CalendarEvent,
   ) {}
+
+  /**
+   * Generate occurrence dates for a recurring event (date part only, no time).
+   */
+  private getRecurrenceOccurrenceDates(dto: CreateRecurringCalendarEventDto): Date[] {
+    const startFrom = new Date(dto.startFrom + 'T00:00:00.000Z');
+    const endAt = new Date(dto.endAt + 'T23:59:59.999Z');
+    if (startFrom > endAt) {
+      throw new BadRequestException('startFrom must be on or before endAt');
+    }
+
+    const dates: Date[] = [];
+
+    if (dto.recurrenceType === RecurrenceType.WEEKLY) {
+      const dayOfWeek = dto.dayOfWeek!;
+      const targetGetDay = dayOfWeek === 7 ? 0 : dayOfWeek;
+      const d = new Date(startFrom);
+      d.setUTCHours(0, 0, 0, 0);
+      while (d.getUTCDay() !== targetGetDay) {
+        d.setUTCDate(d.getUTCDate() + 1);
+        if (d > endAt) return dates;
+      }
+      while (d <= endAt) {
+        dates.push(new Date(d));
+        d.setUTCDate(d.getUTCDate() + 7);
+      }
+      return dates;
+    }
+
+    if (dto.recurrenceType === RecurrenceType.MONTHLY) {
+      const dayOfMonth = dto.dayOfMonth!;
+      const lastDayInMonth = (y: number, m: number) =>
+        new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+      let y = startFrom.getUTCFullYear();
+      let m = startFrom.getUTCMonth();
+      const d = startFrom.getUTCDate();
+      if (d > dayOfMonth) {
+        m += 1;
+        if (m > 11) {
+          m = 0;
+          y += 1;
+        }
+      }
+      while (true) {
+        const last = lastDayInMonth(y, m);
+        const day = Math.min(dayOfMonth, last);
+        const occ = new Date(Date.UTC(y, m, day, 0, 0, 0, 0));
+        if (occ > endAt) break;
+        if (occ >= startFrom) dates.push(occ);
+        m += 1;
+        if (m > 11) {
+          m = 0;
+          y += 1;
+        }
+      }
+      return dates;
+    }
+
+    if (dto.recurrenceType === RecurrenceType.ANNUALLY) {
+      const month = dto.month! - 1;
+      const dayOfMonth = dto.dayOfMonth!;
+      const lastDayInMonth = (y: number, m: number) =>
+        new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+      let y = startFrom.getUTCFullYear();
+      const firstOcc = new Date(
+        Date.UTC(y, month, Math.min(dayOfMonth, lastDayInMonth(y, month)), 0, 0, 0, 0),
+      );
+      if (firstOcc < startFrom) y += 1;
+      while (true) {
+        const last = lastDayInMonth(y, month);
+        const day = Math.min(dayOfMonth, last);
+        const occ = new Date(Date.UTC(y, month, day, 0, 0, 0, 0));
+        if (occ > endAt) break;
+        dates.push(occ);
+        y += 1;
+      }
+      return dates;
+    }
+
+    return dates;
+  }
+
+  /**
+   * Parse time string "HH:mm" or "HH:mm:ss" into [hour, minute, second].
+   */
+  private parseTime(time: string): [number, number, number] {
+    const parts = time.split(':');
+    const hour = parseInt(parts[0], 10);
+    const minute = parseInt(parts[1], 10);
+    const second = parts.length >= 3 ? parseInt(parts[2], 10) : 0;
+    return [hour, minute, second];
+  }
+
+  /**
+   * Create recurring calendar events: generates one CalendarEvent per occurrence for WEEKLY, MONTHLY, or ANNUALLY.
+   */
+  async createRecurring(
+    dto: CreateRecurringCalendarEventDto,
+    createdById: number,
+  ): Promise<CalendarEvent[]> {
+    const occurrenceDates = this.getRecurrenceOccurrenceDates(dto);
+    if (occurrenceDates.length === 0) {
+      throw new BadRequestException(
+        'No occurrences in the given date range. Check startFrom, endAt, and recurrence pattern.',
+      );
+    }
+
+    const [hour, minute, second] = this.parseTime(dto.time);
+    const durationMinutes = dto.durationMinutes ?? 60;
+    const allDay = dto.allDay ?? false;
+
+    const events: CalendarEvent[] = [];
+    for (const occDate of occurrenceDates) {
+      const start = new Date(occDate);
+      start.setUTCHours(hour, minute, second, 0);
+      let end: Date;
+      if (allDay) {
+        end = new Date(start);
+        end.setUTCHours(23, 59, 59, 999);
+      } else {
+        end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+      }
+
+      const event = await this.calendarEventModel.create({
+        title: dto.title,
+        start,
+        end,
+        allDay,
+        backgroundColor: dto.backgroundColor ?? null,
+        borderColor: dto.borderColor ?? null,
+        textColor: dto.textColor ?? null,
+        location: dto.location ?? null,
+        description: dto.description ?? null,
+        createdById,
+      });
+      events.push(event);
+    }
+    return events;
+  }
 
   async create(createDto: CreateCalendarEventDto, createdById: number): Promise<CalendarEvent> {
     // Validate dates
@@ -251,6 +392,41 @@ export class CalendarEventService {
             [Op.and]: [
               { start: { [Op.lt]: weekStart } },
               { end: { [Op.gte]: weekEnd } },
+            ],
+          },
+        ],
+      },
+      include: [
+        {
+          model: User,
+          as: 'createdBy',
+          attributes: ['id', 'name', 'emailAddress'],
+        },
+      ],
+      order: [['start', 'ASC']],
+    });
+  }
+
+  /**
+   * Returns events that overlap with the current month (UTC).
+   */
+  async getThisMonthEvents(): Promise<CalendarEvent[]> {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const monthStart = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
+    const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    const monthEnd = new Date(Date.UTC(year, month, lastDay, 23, 59, 59, 999));
+
+    return this.calendarEventModel.findAll({
+      where: {
+        [Op.or]: [
+          { start: { [Op.gte]: monthStart, [Op.lte]: monthEnd } },
+          { end: { [Op.gte]: monthStart, [Op.lte]: monthEnd } },
+          {
+            [Op.and]: [
+              { start: { [Op.lte]: monthStart } },
+              { end: { [Op.gte]: monthEnd } },
             ],
           },
         ],

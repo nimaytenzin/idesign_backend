@@ -8,13 +8,12 @@ import { ProductCategoryModule } from './modules/product-category/product-catego
 import { ProductSubCategoryModule } from './modules/product-sub-category/product-sub-category.module';
 import { ProductModule } from './modules/product/product.module';
 import { OrderModule } from './modules/order/order.module';
-import { AccountsModule } from './modules/accounts/accounts.module';
+import { PaymentReceiptModule } from './modules/payment-receipt/payment-receipt.module';
+import { BankAccountModule } from './modules/bank-account/bank-account.module';
+import { ExpenseModule } from './modules/expense/expense.module';
 import { SmsModule } from './modules/external/sms/sms.module';
 import { PaymentSettlementModule } from './modules/external/payment-settlement/payment-settlement.module';
 import { CompanyModule } from './modules/company/company-profile/company.module';
-import { ChartOfAccountsModule } from './modules/accounts/chart-of-accounts/chart-of-accounts.module';
-import { TransactionModule } from './modules/accounts/transaction/transaction.module';
-import { ExpenseModule } from './modules/accounts/expense/expense.module';
 import { HeroSlideModule } from './modules/hero-slide/hero-slide.module';
 import { LeaveManagementModule } from './modules/leave-management/leave-management.module';
 import { CompanyClientModule } from './modules/company/company-client/company-client.module';
@@ -47,10 +46,9 @@ import { CalendarEventModule } from './modules/calendar/calendar-event/calendar-
     ProductSubCategoryModule,
     ProductModule,
     OrderModule,
-    ChartOfAccountsModule,
-    TransactionModule,
+    PaymentReceiptModule,
+    BankAccountModule,
     ExpenseModule,
-    AccountsModule,
     PaymentSettlementModule,
     CompanyModule,
     CompanyClientModule,
@@ -62,7 +60,7 @@ import { CalendarEventModule } from './modules/calendar/calendar-event/calendar-
     CustomerModule,
     DiscountModule,
     OutboxModule,
-     TodoModule,
+    TodoModule,
     DocumentCategoryModule,
     DocumentSubCategoryModule,
     DocumentModule,
@@ -76,7 +74,6 @@ import { CalendarEventModule } from './modules/calendar/calendar-event/calendar-
     EmployeeWorkExperienceModule,
     EmployeePayscaleModule,
     AttendanceModule,
-
 
     CalendarEventModule,
   ],

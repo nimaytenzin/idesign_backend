@@ -12,7 +12,7 @@ import {
 } from 'sequelize-typescript';
 import { OrderItem } from './order-item.entity';
 import { OrderDiscount } from './order-discount.entity';
-import { Transaction } from '../../accounts/transaction/entities/transaction.entity';
+import { PaymentReceipt } from '../../payment-receipt/entities/payment-receipt.entity';
 import { Customer } from 'src/modules/customer/entities/customer.entity';
 import { User } from '../../auth/entities/user.entity';
 import { AffiliateCommission } from '../../affiliate-marketer-management/affiliate-commission/entities/affiliate-commission.entity';
@@ -41,6 +41,13 @@ export class Order extends Model<Order> {
     unique: true,
   })
   orderNumber: string;
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: true,
+    unique: true,
+  })
+  invoiceNumber: string;
 
   @ForeignKey(() => Customer)
   @Column({
@@ -210,7 +217,7 @@ export class Order extends Model<Order> {
   expectedDeliveryDate: Date;
 
   // ============================================
-  // Payment Information
+  // Payment Information (summary from paymentReceipts; supports single or multiple payments)
   // ============================================
   @Column({
     type: DataType.ENUM(...Object.values(PaymentStatus)),
@@ -303,8 +310,8 @@ export class Order extends Model<Order> {
   @HasMany(() => OrderDiscount)
   orderDiscounts: OrderDiscount[];
 
-  @HasMany(() => Transaction)
-  transactions: Transaction[];
+  @HasMany(() => PaymentReceipt)
+  paymentReceipts: PaymentReceipt[];
 
   @HasMany(() => AffiliateCommission)
   affiliateCommissions: AffiliateCommission[];

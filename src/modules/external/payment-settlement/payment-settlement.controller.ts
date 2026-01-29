@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Logger,
 } from '@nestjs/common';
 import { PaymentSettlementService } from './payment-settlement.service';
 import { CreatePaymentSettlementDto } from './dto/create-payment-settlement.dto';
@@ -25,6 +26,8 @@ import {
 
 @Controller('payment-settlement')
 export class PaymentSettlementController {
+  private readonly logger = new Logger(PaymentSettlementController.name);
+
   constructor(
     private readonly paymentSettlementService: PaymentSettlementService,
   ) {}
@@ -33,6 +36,8 @@ export class PaymentSettlementController {
   sendPaymentInitiation(
     @Body() body: ClientInitiatePaymentDTO,
   ): Promise<PaymentInitiationResponseDTO | ErrorResponse> {
+    this.logger.log(`[initiate-payment] Request received`);
+    this.logger.log(`[initiate-payment] Request body: ${JSON.stringify(body)}`);
     return this.paymentSettlementService.processInitiatePayment(body);
   }
 

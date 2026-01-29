@@ -59,7 +59,7 @@ export class Product extends Model<Product> {
 
   @Column({
     type: DataType.STRING,
-    allowNull: false,
+    allowNull: true,
   })
   material: string;
 
@@ -100,14 +100,6 @@ export class Product extends Model<Product> {
     defaultValue: 0,
   })
   salesCount: number;
-
-  @Default(0)
-  @Column({
-    type: DataType.INTEGER,
-    allowNull: false,
-    defaultValue: 0,
-  })
-  stockQuantity: number;
 
   @BelongsTo(() => ProductSubCategory)
   productSubCategory: ProductSubCategory;
