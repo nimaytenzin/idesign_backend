@@ -32,8 +32,7 @@ export class DeliveryRateController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN,UserRole.STAFF)
+
   findAll(): Promise<DeliveryRate[]> {
     return this.deliveryRateService.findAll();
   }
