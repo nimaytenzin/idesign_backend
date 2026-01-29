@@ -15,7 +15,6 @@ import { OrderDiscount } from './entities/order-discount.entity';
 import { Product } from '../product/entities/product.entity';
 import { PaymentReceiptService } from '../payment-receipt/payment-receipt.service';
 import { CustomerService } from '../customer/customer.service';
-import { CustomerDetailsDto } from '../customer/dto/customer-details.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { ProcessPaymentDto } from './dto/process-payment.dto';
@@ -42,10 +41,13 @@ import { SmsService } from '../external/sms/sms.service';
 import { SendSmsNotificationDto } from '../external/sms/dto/create-sm.dto';
 import { DiscountCalculationService } from '../discount/services/discount-calculation.service';
 import { DiscountScope } from '../discount/entities/discount.entity';
-import { User, UserRole } from '../auth/entities/user.entity';
+import { User } from '../auth/entities/user.entity';
 import { AffiliateCommission } from '../affiliate-marketer-management/affiliate-commission/entities/affiliate-commission.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { AffiliateProfile } from '../affiliate-marketer-management/affiliate-profile/entities/affiliate-profile.entity';
+import { OrderPlacementSupportService } from './services/order-placement-support.service';
+import { OnlinePlaceOrderService } from './services/online-place-order.service';
+import { InstorePlaceOrderService } from './services/instore-place-order.service';
 import { PaginationService } from '../../common/pagination/pagination.service';
 import { GetOrdersPaginatedQueryDto } from './dto/get-orders-paginated-query.dto';
 import { GetOrdersCompletedQueryDto } from './dto/get-orders-completed-query.dto';
@@ -67,10 +69,6 @@ export class OrderService {
     @InjectModel(Product)
     private productModel: typeof Product,
     private readonly paymentReceiptService: PaymentReceiptService,
-    @InjectModel(User)
-    private userModel: typeof User,
-    @InjectModel(AffiliateProfile)
-    private affiliateProfileModel: typeof AffiliateProfile,
     @InjectModel(AffiliateCommission)
     private affiliateCommissionModel: typeof AffiliateCommission,
     private readonly sequelize: Sequelize,
@@ -79,883 +77,83 @@ export class OrderService {
     private readonly discountCalculationService: DiscountCalculationService,
     private readonly paginationService: PaginationService,
     private readonly smsService: SmsService,
+    private readonly orderPlacementSupport: OrderPlacementSupportService,
+    private readonly onlinePlaceOrderService: OnlinePlaceOrderService,
+    private readonly instorePlaceOrderService: InstorePlaceOrderService,
   ) {}
 
-  // Find or create customer based on email, name, or phone
-  // Uses CustomerService to handle customer operations
-  private async findOrCreateCustomer(
-    customerDetails: CustomerDetailsDto,
-  ): Promise<Customer> {
-    return this.customerService.findOrCreateCustomer(customerDetails);
-  }
-
-  // Order Number Generation
-  private async generateOrderNumber(): Promise<string> {
-    const year = new Date().getFullYear();
-    const prefix = `ORD-${year}-`;
-
-    // Find the last order number for this year
-    const lastOrder = await this.orderModel.findOne({
-      where: {
-        orderNumber: {
-          [Op.like]: `${prefix}%`,
-        },
-      },
-      order: [['orderNumber', 'DESC']],
-    });
-
-    let sequence = 1;
-    if (lastOrder) {
-      const lastSequence = parseInt(
-        lastOrder.orderNumber.replace(prefix, ''),
-      );
-      sequence = lastSequence + 1;
-    }
-
-    return `${prefix}${sequence.toString().padStart(4, '0')}`;
-  }
-
-  private async generateOrderNumberInTransaction(transaction?: any): Promise<string> {
-    const year = new Date().getFullYear();
-    const prefix = `ORD-${year}-`;
-
-    const lastOrder = await this.orderModel.findOne({
-      where: {
-        orderNumber: {
-          [Op.like]: `${prefix}%`,
-        },
-      },
-      order: [['orderNumber', 'DESC']],
-      transaction,
-    });
-
-    let sequence = 1;
-    if (lastOrder) {
-      const lastSequence = parseInt(
-        lastOrder.orderNumber.replace(prefix, ''),
-      );
-      sequence = lastSequence + 1;
-    }
-
-    return `${prefix}${sequence.toString().padStart(4, '0')}`;
-  }
-
   /**
-   * Link affiliate marketer to order by voucher code
-   * @param voucherCode - The voucher code to check
-   * @param transaction - Optional transaction context
-   * @returns Object with affiliateId and commissionPercentage, or null if not found
+   * Place an online order (or counter pay-later). Delegates to OnlinePlaceOrderService.
    */
-  private async linkAffiliateMarketerByVoucherCode(
-    voucherCode: string,
-    transaction?: any,
-  ): Promise<{ affiliateId: number; commissionPercentage: number } | null> {
-    if (!voucherCode) {
-      return null;
-    }
-
-    const affiliateProfile = await this.affiliateProfileModel.findOne({
-      where: {
-        voucherCode: voucherCode.trim().toUpperCase(),
-      },
-      include: [
-        {
-          model: User,
-          as: 'user',
-          where: {
-            role: UserRole.AFFILIATE_MARKETER,
-            isActive: true, // Only link to active affiliate marketers
-          },
-        },
-      ],
-      transaction,
-    });
-
-    if (!affiliateProfile || !affiliateProfile.user) {
-      this.logger.debug(
-        `[Affiliate Linking] No active affiliate marketer found for voucher code: ${voucherCode}`,
-      );
-      return null;
-    }
-
-    const commissionPercentage = affiliateProfile.commissionPercentage
-      ? parseFloat(affiliateProfile.commissionPercentage.toString())
-      : 0;
-
-    this.logger.log(
-      `[Affiliate Linking] Linked affiliate marketer ${affiliateProfile.user.id} (${affiliateProfile.user.name}) to order via voucher code: ${voucherCode}`,
-    );
-
-    return {
-      affiliateId: affiliateProfile.user.id,
-      commissionPercentage,
-    };
-  }
-
-  // Invoice Number Generation
-  private async generateInvoiceNumber(transaction?: any): Promise<string> {
-    const year = new Date().getFullYear();
-    const prefix = `INV-${year}-`;
-
-    const last = await this.orderModel.findOne({
-      where: { invoiceNumber: { [Op.like]: `${prefix}%` } },
-      order: [['invoiceNumber', 'DESC']],
-      transaction,
-    });
-
-    const sequence = last
-      ? parseInt(String(last.invoiceNumber).replace(prefix, ''), 10) + 1
-      : 1;
-    return `${prefix}${sequence.toString().padStart(4, '0')}`;
-  }
-
-  // Order Methods - Direct implementation (CQRS removed, keeping event sourcing)
   async createOrder(createOrderDto: CreateOrderDto, userId?: number): Promise<Order> {
-    // Use transaction for atomicity
-    return this.sequelize.transaction(async (transaction) => {
-
-      // Find or create customer
-      const customer = await this.customerService.findOrCreateCustomer(
-        createOrderDto.customer,
-      );
-
-      // Validate order has at least one item
-      if (
-        !createOrderDto.orderItems ||
-        createOrderDto.orderItems.length === 0
-      ) {
-        throw new BadRequestException('Order must have at least one item');
-      }
-
-      // Validate products exist
-      const orderItemsForCalculation = [];
-      for (const item of createOrderDto.orderItems) {
-        const product = await this.productModel.findByPk(item.productId, {
-          transaction,
-        });
-        if (!product) {
-          throw new NotFoundException(
-            `Product with ID ${item.productId} not found`,
-          );
-        }
-        if (!product.isAvailable) {
-          throw new BadRequestException(
-            `Product ${product.title} is not available`,
-          );
-        }
-
-        orderItemsForCalculation.push({
-          productId: item.productId,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        });
-      }
-
-      // Calculate discounts using discount calculation service
-      const discountResult =
-        await this.discountCalculationService.calculateOrderDiscounts(
-          orderItemsForCalculation,
-          createOrderDto.voucherCode,
-        );
-
-      this.logger.log(
-        `[Order Creation] Discount calculation result:`,
-      );
-      this.logger.log(
-        `  - Order discount: ${discountResult.orderDiscount}`,
-      );
-      this.logger.log(
-        `  - Line item discounts: ${discountResult.lineItemDiscounts.length} items`,
-      );
-      this.logger.log(
-        `  - Applied discounts: ${discountResult.appliedDiscounts.length}`,
-      );
-
-      // Apply calculated discounts to items (merge with any manually provided discounts)
-      const itemsWithDiscounts = createOrderDto.orderItems.map((item) => {
-        const calculatedDiscount = discountResult.lineItemDiscounts.find(
-          (ld) => ld.productId === item.productId,
-        );
-        // Use calculated discount if available, otherwise use provided discount
-        const discountApplied =
-          calculatedDiscount?.discountAmount || item.discountApplied || 0;
-
-        const lineTotal = item.quantity * item.unitPrice - discountApplied;
-        return {
-          ...item,
-          discountApplied,
-          lineTotal,
-        };
-      });
-
-      // Calculate subtotal after item discounts
-      const subtotal = itemsWithDiscounts.reduce(
-        (sum, item) => sum + item.lineTotal,
-        0,
-      );
-
-      // Validate deliveryRateId and shippingAddress are required for DELIVERY fulfillment type
-      const fulfillmentType = createOrderDto.fulfillmentType || FulfillmentType.DELIVERY;
-      if (fulfillmentType === FulfillmentType.DELIVERY) {
-        if (!createOrderDto.deliveryRateId) {
-          throw new BadRequestException(
-            'deliveryRateId is required when fulfillmentType is DELIVERY',
-          );
-        }
-        if (!createOrderDto.shippingAddress) {
-          throw new BadRequestException(
-            'shippingAddress is required when fulfillmentType is DELIVERY',
-          );
-        }
-      }
-
-      // Snapshot delivery information from DeliveryRate if provided
-      let deliveryLocation: string | null = null;
-      let deliveryMode: string | null = null;
-      let deliveryCost = createOrderDto.deliveryCost || 0;
-
-      if (createOrderDto.deliveryRateId) {
-        const { DeliveryRate } = await import('../delivery/delivery-rate/entities/delivery-rate.entity');
-        const { DeliveryLocation } = await import('../delivery/delivery-location/entities/delivery-location.entity');
-        
-        const deliveryRate = await DeliveryRate.findByPk(createOrderDto.deliveryRateId, {
-          include: [{ model: DeliveryLocation, as: 'deliveryLocation' }],
-          transaction,
-        });
-
-        if (deliveryRate) {
-          deliveryLocation = deliveryRate.deliveryLocation?.name || null;
-          deliveryMode = deliveryRate.transportMode || null;
-          // Use rate from DeliveryRate if deliveryCost wasn't explicitly provided
-          if (createOrderDto.deliveryCost === undefined) {
-            deliveryCost = parseFloat(deliveryRate.rate.toString());
-          }
-        }
-      }
-
-      // Calculate order total BEFORE any discounts (for affiliate commission calculation)
-      // This is the sum of all item prices (quantity * unitPrice) + delivery cost
-      const orderTotalBeforeDiscount = createOrderDto.orderItems.reduce(
-        (sum, item) => sum + item.quantity * item.unitPrice,
-        0,
-      ) + deliveryCost;
-
-      // Use calculated order discount (merge with any manually provided)
-      const discount =
-        discountResult.orderDiscount || createOrderDto.discount || 0;
-
-      const totalPayable = subtotal - discount + deliveryCost;
-
-      this.logger.log(
-        `[Order Creation] Order totals:`,
-      );
-      this.logger.log(
-        `  - Subtotal (after line item discounts): ${subtotal}`,
-      );
-      this.logger.log(
-        `  - Discount: ${discount}`,
-      );
-      this.logger.log(
-        `  - Delivery cost: ${deliveryCost}`,
-      );
-      this.logger.log(
-        `  - Total payable: ${totalPayable}`,
-      );
-
-      // Generate order number and invoice number
-      const orderNumber = await this.generateOrderNumberInTransaction(transaction);
-      const invoiceNumber = await this.generateInvoiceNumber(transaction);
-
-      // Determine order type - payment status always starts as PENDING for order placement
-      const orderSource = createOrderDto.orderSource || OrderSource.ONLINE;
-      const paymentStatus = PaymentStatus.PENDING;
-
-      // Link affiliate marketer by voucher code if provided
-      let affiliateId: number | null = null;
-      let commissionPercentage: number | null = null;
-
-      if (createOrderDto.voucherCode) {
-        const affiliateLink = await this.linkAffiliateMarketerByVoucherCode(
-          createOrderDto.voucherCode,
-          transaction,
-        );
-
-        if (affiliateLink) {
-          affiliateId = affiliateLink.affiliateId;
-          commissionPercentage = affiliateLink.commissionPercentage;
-        }
-      }
-
-      // Create order projection
-      const now = new Date();
-      const order = await this.orderModel.create(
-        {
-          customerId: customer.id,
-          orderNumber,
-          invoiceNumber,
-          orderSource: createOrderDto.orderSource || OrderSource.ONLINE,
-          fulfillmentType,
-          subTotal: subtotal,
-          discount,
-          totalPayable,
-          voucherCode: createOrderDto.voucherCode,
-          fulfillmentStatus: FulfillmentStatus.PLACED,
-          paymentStatus,
-          paymentMethod: createOrderDto.paymentMethod || null,
-          deliveryCost,
-          deliveryRateId: createOrderDto.deliveryRateId || null,
-          deliveryLocation,
-          deliveryMode,
-          shippingAddress: createOrderDto.shippingAddress || null,
-          internalNotes: createOrderDto.internalNotes,
-          referrerSource: createOrderDto.referrerSource || null,
-          affiliateId,
-          servedBy: createOrderDto.servedBy || (orderSource === OrderSource.COUNTER && userId ? userId : null),
-          placedAt: now,
-          paidAt: null, // Payment is always null on order placement
-        },
-        { transaction },
-      );
-
-      // Create order items with calculated discounts
-      for (const item of itemsWithDiscounts) {
-        await this.orderItemModel.create(
-          {
-            orderId: order.id,
-            productId: item.productId,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            discountApplied: item.discountApplied,
-            lineTotal: item.lineTotal,
-          },
-          { transaction },
-        );
-      }
-
-      // Track applied discounts - create OrderDiscount records
-      if (discountResult.appliedDiscounts && discountResult.appliedDiscounts.length > 0) {
-        // Group discounts by scope
-        const orderLevelDiscounts = discountResult.appliedDiscounts.filter(
-          (d) => d.discountScope === DiscountScope.ORDER_TOTAL
-        );
-        const productLevelDiscounts = discountResult.appliedDiscounts.filter(
-          (d) => d.discountScope === DiscountScope.PER_PRODUCT
-        );
-
-        // Track order-level discounts
-        if (orderLevelDiscounts.length > 0 && discountResult.orderDiscount > 0) {
-          // Split order discount among applicable order-level discounts
-          const discountPerDiscount = discountResult.orderDiscount / orderLevelDiscounts.length;
-          
-          for (const discount of orderLevelDiscounts) {
-            await this.orderDiscountModel.create(
-              {
-                orderId: order.id,
-                discountId: discount.id,
-                discountAmount: discountPerDiscount,
-                discountName: discount.name,
-                discountType: discount.discountType,
-                voucherCode: discount.voucherCode,
-              },
-              { transaction },
-            );
-          }
-        }
-
-        // Track product-level discounts
-        if (productLevelDiscounts.length > 0) {
-          // Calculate total line item discount
-          const totalLineItemDiscount = discountResult.lineItemDiscounts.reduce(
-            (sum, ld) => sum + ld.discountAmount,
-            0
-          );
-
-          if (totalLineItemDiscount > 0) {
-            // Split line item discounts among applicable product-level discounts
-            const discountPerDiscount = totalLineItemDiscount / productLevelDiscounts.length;
-            
-            for (const discount of productLevelDiscounts) {
-              await this.orderDiscountModel.create(
-                {
-                  orderId: order.id,
-                  discountId: discount.id,
-                  discountAmount: discountPerDiscount,
-                  discountName: discount.name,
-                  discountType: discount.discountType,
-                  voucherCode: discount.voucherCode,
-                },
-                { transaction },
-              );
-            }
-          }
-        }
-      }
-
-      // Create affiliate commission record if voucher code belongs to an affiliate
-      if (affiliateId && commissionPercentage !== null && commissionPercentage > 0) {
-        const commissionAmount = (orderTotalBeforeDiscount * commissionPercentage) / 100;
-
-        await this.affiliateCommissionModel.create(
-          {
-            affiliateId,
-            orderId: order.id,
-            orderTotal: orderTotalBeforeDiscount,
-            commissionAmount,
-            commissionPercentage,
-            orderDate: now,
-            paymentStatus,
-          },
-          { transaction },
-        );
-
-        this.logger.log(
-          `[Affiliate Commission] Created commission for affiliate ${affiliateId}: ${commissionAmount} (${commissionPercentage}% of ${orderTotalBeforeDiscount})`,
-        );
-      }
-
-      // Reload order with relations
-      const savedOrder = await this.orderModel.findByPk(order.id, {
-        include: [
-          { model: Customer, as: 'customer' },
-          { model: OrderItem, as: 'orderItems' },
-          { model: OrderDiscount, as: 'orderDiscounts' },
-        ],
-        transaction,
-      });
-
-      this.logger.log(
-        `[Order Created] Order ID: ${savedOrder.id}, Order Number: ${savedOrder.orderNumber}, Source: ${orderSource}, Payment Status: ${paymentStatus}`,
-      );
-
-      // SMS templates: skip for COUNTER; counter flows send their own non-template SMS.
-      if (orderSource !== OrderSource.COUNTER) {
-        const triggerEvent = SmsTriggerEvent.ORDER_PLACED;
-        this.smsTriggerService
-          .processSmsTemplates(savedOrder, triggerEvent)
-          .then(() => this.logger.log(`[SMS Trigger] Queued SMS templates for order ${savedOrder.id}`))
-          .catch((e) => this.logger.error(`[SMS Trigger] order ${savedOrder.id}: ${(e as Error)?.message}`, (e as Error)?.stack));
-      }
-
-      return savedOrder;
-    });
+    return this.onlinePlaceOrderService.onlinePlaceOrder(createOrderDto, userId);
   }
 
   /**
-   * Place a counter order with immediate payment
-   * For counter purchases:
-   * - Order source is COUNTER
-   * - Fulfillment type can be INSTORE or DELIVERY
-   * - Payment status is PAID
-   * - Payment method must be CASH or bank transfer
-   * - All timestamps (placedAt, confirmedAt, processingAt, paidAt) are set to now
-   * - If INSTORE: no delivery charges, delivery fields not required, fulfillment status is CONFIRMED (use mark-collected when customer picks up)
-   * - If DELIVERY: validate delivery fields (deliveryRateId, shippingAddress), set delivery cost from rate
-   * - Fulfillment status is PROCESSING
+   * Place a counter order (Pay Now or Pay Later). Delegates to InstorePlaceOrderService.
    */
   async instorePlaceOrder(
     createOrderDto: CreateOrderDto,
     userId?: number,
   ): Promise<Order> {
-    // Validate order source is COUNTER
-    if(
-      createOrderDto.orderSource !== OrderSource.COUNTER
-    ) {
-      throw new BadRequestException(
-        'Order source must be COUNTER for instore orders',
-      );
-    }
+    return this.instorePlaceOrderService.instorePlaceOrder(createOrderDto, userId);
+  }
 
-    // Use transaction for atomicity
-    return this.sequelize.transaction(async (transaction) => {
-      // Find or create customer
-      const customer = await this.customerService.findOrCreateCustomer(
-        createOrderDto.customer,
-      );
+  /**
+   * Clean up stale online orders: source ONLINE, not PAID, fulfillmentStatus PLACED, placedAt older than 10 minutes.
+   * Deletes order items, order discounts, affiliate commissions, then the order.
+   * Called by cron every 10 minutes.
+   */
+  async cleanupStaleOnlineOrders(): Promise<number> {
+    const staleCutoff = new Date(Date.now() - 10 * 60 * 1000); // 10 minutes ago
 
-      // Validate order has at least one item
-      if (
-        !createOrderDto.orderItems ||
-        createOrderDto.orderItems.length === 0
-      ) {
-        throw new BadRequestException('Order must have at least one item');
-      }
-
-      // Validate products exist
-      const orderItemsForCalculation = [];
-      for (const item of createOrderDto.orderItems) {
-        const product = await this.productModel.findByPk(item.productId, {
-          transaction,
-        });
-        if (!product) {
-          throw new NotFoundException(
-            `Product with ID ${item.productId} not found`,
-          );
-        }
-        if (!product.isAvailable) {
-          throw new BadRequestException(
-            `Product ${product.title} is not available`,
-          );
-        }
-
-        orderItemsForCalculation.push({
-          productId: item.productId,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        });
-      }
-
-      // Calculate discounts using discount calculation service
-      const discountResult =
-        await this.discountCalculationService.calculateOrderDiscounts(
-          orderItemsForCalculation,
-          createOrderDto.voucherCode,
-        );
-
-      // Apply calculated discounts to items (merge with any manually provided discounts)
-      const itemsWithDiscounts = createOrderDto.orderItems.map((item) => {
-        const calculatedDiscount = discountResult.lineItemDiscounts.find(
-          (ld) => ld.productId === item.productId,
-        );
-        // Use calculated discount if available, otherwise use provided discount
-        const discountApplied =
-          calculatedDiscount?.discountAmount || item.discountApplied || 0;
-
-        const lineTotal = item.quantity * item.unitPrice - discountApplied;
-        return {
-          ...item,
-          discountApplied,
-          lineTotal,
-        };
-      });
-
-      // Calculate subtotal without application of discount (before discounts)
-      const subtotal = createOrderDto.orderItems.reduce(
-        (sum, item) => sum + (item.quantity * item.unitPrice),
-        0,
-      );
-
-      // Handle delivery information based on fulfillment type
-      let deliveryLocation: string | null = null;
-      let deliveryMode: string | null = null;
-      let deliveryCost = 0;
-
-      // If DELIVERY, validate and set delivery fields
-      if (createOrderDto.fulfillmentType === FulfillmentType.DELIVERY) {
-        if (!createOrderDto.deliveryRateId) {
-          throw new BadRequestException(
-            'deliveryRateId is required when fulfillmentType is DELIVERY',
-          );
-        }
-        if (!createOrderDto.shippingAddress) {
-          throw new BadRequestException(
-            'shippingAddress is required when fulfillmentType is DELIVERY',
-          );
-        }
-
-        // Fetch delivery rate and location
-        const { DeliveryRate } = await import('../delivery/delivery-rate/entities/delivery-rate.entity');
-        const { DeliveryLocation } = await import('../delivery/delivery-location/entities/delivery-location.entity');
-        
-        const deliveryRate = await DeliveryRate.findByPk(createOrderDto.deliveryRateId, {
-          include: [{ model: DeliveryLocation, as: 'deliveryLocation' }],
-          transaction,
-        });
-
-        if (!deliveryRate) {
-          throw new NotFoundException(
-            `Delivery rate with ID ${createOrderDto.deliveryRateId} not found`,
-          );
-        }
-
-        deliveryLocation = deliveryRate.deliveryLocation?.name || null;
-        deliveryMode = deliveryRate.transportMode || null;
-        // Use rate from DeliveryRate (deliveryCost from DTO is ignored for counter orders)
-        deliveryCost = parseFloat(deliveryRate.rate.toString());
-      }
- 
-    
-      // Use calculated order discount (merge with any manually provided)
-      const discount =
-        discountResult.orderDiscount || createOrderDto.discount || 0;
-
-      const totalPayable = subtotal - discount + deliveryCost;
-
-      this.logger.log(
-        `[Counter Order Creation] Order totals:`,
-      );
-      this.logger.log(
-        `  - Subtotal (before discounts): ${subtotal}`,
-      );
-      this.logger.log(
-        `  - Discount: ${discount}`,
-      );
-      this.logger.log(
-        `  - Delivery cost: ${deliveryCost}`,
-      );
-      this.logger.log(
-        `  - Total payable: ${totalPayable}`,
-      );
-
-      // Generate order number and invoice number
-      const orderNumber = await this.generateOrderNumberInTransaction(transaction);
-      const invoiceNumber = await this.generateInvoiceNumber(transaction);
-
-      // Set all timestamps to now for counter orders
-      const now = new Date();
-
-      // Determine fulfillment status based on fulfillment type
-      // DELIVERY → PROCESSING, INSTORE → CONFIRMED (pay now, collect later; use mark-collected when customer picks up)
-      const fulfillmentStatus = createOrderDto.fulfillmentType === FulfillmentType.INSTORE
-        ? FulfillmentStatus.CONFIRMED
-        : FulfillmentStatus.PROCESSING;
-
-      // Create order projection with all timestamps set to now; payment summary set via createPaymentReceipt
-      const order = await this.orderModel.create(
-        {
-          customerId: customer.id,
-          orderNumber,
-          invoiceNumber,
-          orderSource: OrderSource.COUNTER,
-          fulfillmentType: createOrderDto.fulfillmentType,
-          fulfillmentStatus,
-          subTotal: subtotal,
-          discount,
-          totalPayable,
-          voucherCode: createOrderDto.voucherCode,
-          paymentStatus: PaymentStatus.PENDING,
-          paymentMethod: null,
-          deliveryCost,
-          deliveryRateId: createOrderDto.deliveryRateId || null,
-          deliveryLocation,
-          deliveryMode,
-          shippingAddress: createOrderDto.shippingAddress || null,
-          deliveryNotes: createOrderDto.deliveryNotes || null,
-          expectedDeliveryDate: null, // Not required for counter orders
-          internalNotes: createOrderDto.internalNotes,
-          referrerSource: createOrderDto.referrerSource || null,
-          affiliateId: null, // No affiliate for instore/counter orders
-          servedBy: null, // Not required per comment
-          placedAt: now,
-          confirmedAt: now,
-          processingAt: fulfillmentStatus === FulfillmentStatus.PROCESSING ? now : null,
-          shippingAt: null, // Not set for counter orders initially
-          deliveredAt: null, // Set when marked collected (INSTORE) or delivered (DELIVERY)
-          paidAt: null,
-          receiptGenerated: false,
-          receiptNumber: null,
-        },
-        { transaction },
-      );
-
-      // Create order items with calculated discounts
-      for (const item of itemsWithDiscounts) {
-        await this.orderItemModel.create(
-          {
-            orderId: order.id,
-            productId: item.productId,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            discountApplied: item.discountApplied,
-            lineTotal: item.lineTotal,
-          },
-          { transaction },
-        );
-      }
-
-      // Track applied discounts - create OrderDiscount records
-      if (discountResult.appliedDiscounts && discountResult.appliedDiscounts.length > 0) {
-        // Group discounts by scope
-        const orderLevelDiscounts = discountResult.appliedDiscounts.filter(
-          (d) => d.discountScope === DiscountScope.ORDER_TOTAL
-        );
-        const productLevelDiscounts = discountResult.appliedDiscounts.filter(
-          (d) => d.discountScope === DiscountScope.PER_PRODUCT
-        );
-
-        // Track order-level discounts
-        if (orderLevelDiscounts.length > 0 && discountResult.orderDiscount > 0) {
-          // Split order discount among applicable order-level discounts
-          const discountPerDiscount = discountResult.orderDiscount / orderLevelDiscounts.length;
-          
-          for (const discount of orderLevelDiscounts) {
-            await this.orderDiscountModel.create(
-              {
-                orderId: order.id,
-                discountId: discount.id,
-                discountAmount: discountPerDiscount,
-                discountName: discount.name,
-                discountType: discount.discountType,
-                voucherCode: discount.voucherCode,
-              },
-              { transaction },
-            );
-          }
-        }
-
-        // Track product-level discounts
-        if (productLevelDiscounts.length > 0) {
-          // Calculate total line item discount
-          const totalLineItemDiscount = discountResult.lineItemDiscounts.reduce(
-            (sum, ld) => sum + ld.discountAmount,
-            0
-          );
-
-          if (totalLineItemDiscount > 0) {
-            // Split line item discounts among applicable product-level discounts
-            const discountPerDiscount = totalLineItemDiscount / productLevelDiscounts.length;
-            
-            for (const discount of productLevelDiscounts) {
-              await this.orderDiscountModel.create(
-                {
-                  orderId: order.id,
-                  discountId: discount.id,
-                  discountAmount: discountPerDiscount,
-                  discountName: discount.name,
-                  discountType: discount.discountType,
-                  voucherCode: discount.voucherCode,
-                },
-                { transaction },
-              );
-            }
-          }
-        }
-      }
-
-      // Create payment receipt (full amount) and sync order payment summary to PAID
-      // When payment method is not CASH, bankAccountId is required (enforced by CreateOrderDto)
-      //if no payment method is provided, dont create a payment receipt
-     if(createOrderDto.paymentMethod){
-      await this.paymentReceiptService.createPaymentReceipt(
-        order.id,
-        {
-          amount: totalPayable,
-          paymentMethod: createOrderDto.paymentMethod,
-          paidAt: now,
-          bankAccountId: createOrderDto.paymentMethod !== PaymentMethod.CASH ? createOrderDto.bankAccountId : undefined,
-        },
-        transaction,
-      );
-     }
-
-      // Reload order with relations
-      const savedOrder = await this.orderModel.findByPk(order.id, {
-        include: [
-          { model: Customer, as: 'customer' },
-          { model: OrderItem, as: 'orderItems' },
-          { model: OrderDiscount, as: 'orderDiscounts' },
-        ],
-        transaction,
-      });
-
-      // Product sales count incremented when marked collected (INSTORE) or delivered (DELIVERY)
-
-      this.logger.log(
-        `[Counter Order Created] Order ID: ${savedOrder.id}, Order Number: ${savedOrder.orderNumber}, Fulfillment Type: ${savedOrder.fulfillmentType}, Payment Status: PAID`,
-      );
-
-      // Send SMS (no template): INSTORE+PAID vs DELIVERY+PAID. Fire-and-forget.
-      const orderCustomer = (savedOrder as any).customer;
-      const phone = typeof orderCustomer?.phoneNumber === 'string' ? orderCustomer.phoneNumber.trim() : null;
-      if (phone) {
-        const total = Number(savedOrder.totalPayable ?? 0).toFixed(2);
-        const isInstore = savedOrder.fulfillmentType === FulfillmentType.INSTORE;
-        const msg = isInstore
-          ? `Thank you! Your order ${savedOrder.orderNumber} totals Nu.${total}. Collect from our store at your convenience.`
-          : `Thank you! Your order ${savedOrder.orderNumber} (Nu.${total}) has been confirmed. We will deliver to your address.`;
-        this.smsService
-          .sendSmsNotification({ phoneNumber: phone, message: msg })
-          .then(() => this.logger.log(`[Instore Place Order] SMS sent to ${phone} (${isInstore ? 'INSTORE' : 'DELIVERY'}+PAID)`))
-          .catch((e) => this.logger.warn(`[Instore Place Order] SMS could not be sent: ${(e as Error)?.message ?? e}`));
-      }
-
-      return savedOrder;
+    const orders = await this.orderModel.findAll({
+      where: {
+        orderSource: OrderSource.ONLINE,
+        fulfillmentStatus: FulfillmentStatus.PLACED,
+        paymentStatus: { [Op.ne]: PaymentStatus.PAID },
+        placedAt: { [Op.lt]: staleCutoff },
+      },
     });
-  }
 
-  /**
-   * Single counter order entry: pay-now (INSTORE/DELIVERY/PICKUP) or order-to-pay-later.
-   * orderSource is forced to COUNTER.
-   * - paymentMethod + (INSTORE|DELIVERY) → instorePlaceOrder
-   * - paymentMethod + (PICKUP|undefined) → createCounterPayNowPickupLater
-   * - no paymentMethod → createCounterOrderToPayLater
-   */
-  async createCounterOrder(createOrderDto: CreateOrderDto, userId?: number): Promise<Order> {
-    const dto = { ...createOrderDto, orderSource: OrderSource.COUNTER };
-    if (dto.paymentMethod != null) {
-      if (dto.fulfillmentType === FulfillmentType.INSTORE || dto.fulfillmentType === FulfillmentType.DELIVERY) {
-        return this.instorePlaceOrder(dto, userId);
+    if (orders.length === 0) {
+      return 0;
+    }
+
+    let deleted = 0;
+    for (const order of orders) {
+      try {
+        await this.sequelize.transaction(async (transaction) => {
+          await this.orderDiscountModel.destroy({
+            where: { orderId: order.id },
+            transaction,
+          });
+          await this.orderItemModel.destroy({
+            where: { orderId: order.id },
+            transaction,
+          });
+          await this.affiliateCommissionModel.destroy({
+            where: { orderId: order.id },
+            transaction,
+          });
+          await order.destroy({ transaction });
+        });
+        deleted++;
+        this.logger.log(
+          `[Cleanup] Deleted stale online order id=${order.id} orderNumber=${order.orderNumber}`,
+        );
+      } catch (e) {
+        this.logger.error(
+          `[Cleanup] Failed to delete stale order id=${order.id}: ${(e as Error)?.message}`,
+          (e as Error)?.stack,
+        );
       }
-      return this.createCounterPayNowPickupLater(dto as any, userId);
     }
-    return this.createCounterOrderToPayLater(createOrderDto, userId);
-  }
 
-  /**
-   * Counter: Order to pay later (e.g. offices, retail shops, bulk orders).
-   * orderSource=COUNTER, paymentStatus=PENDING, no payment at placement.
-   * fulfillmentType: INSTORE (collect at shop), PICKUP (collect at shop), or DELIVERY (we deliver; pay on delivery or invoice).
-   * For DELIVERY, deliveryRateId and shippingAddress are required (enforced by CreateOrderDto).
-   */
-  async createCounterOrderToPayLater(
-    createOrderDto: CreateOrderDto,
-    userId?: number,
-  ): Promise<Order> {
-    const allowed: FulfillmentType[] = [FulfillmentType.INSTORE, FulfillmentType.PICKUP, FulfillmentType.DELIVERY];
-    const ft = createOrderDto.fulfillmentType;
-    if (!ft || !allowed.includes(ft)) {
-      throw new BadRequestException(
-        'fulfillmentType is required for order-to-pay-later and must be one of: INSTORE, PICKUP, DELIVERY.',
-      );
+    if (deleted > 0) {
+      this.logger.log(`[Cleanup] Removed ${deleted} stale online order(s).`);
     }
-    const { paymentMethod, ...rest } = createOrderDto;
-    const savedOrder = await this.createOrder({ ...rest, orderSource: OrderSource.COUNTER, fulfillmentType: ft }, userId);
-    // SMS (no template): UNPAID + DELIVERY vs UNPAID + PICKUP/INSTORE. Fire-and-forget.
-    const cust = (savedOrder as any).customer;
-    const phone = typeof cust?.phoneNumber === 'string' ? cust.phoneNumber.trim() : null;
-    if (phone) {
-      const total = Number(savedOrder.totalPayable ?? 0).toFixed(2);
-      const msg = ft === FulfillmentType.DELIVERY
-        ? `Your order ${savedOrder.orderNumber} (Nu.${total}) has been placed. Please have payment ready on delivery.`
-        : `Your order ${savedOrder.orderNumber} (Nu.${total}) has been placed. Please pay when you collect from our store.`;
-      this.smsService
-        .sendSmsNotification({ phoneNumber: phone, message: msg })
-        .then(() => this.logger.log(`[Counter Order-To-Pay-Later] SMS sent to ${phone} (UNPAID+${ft})`))
-        .catch((e) => this.logger.warn(`[Counter Order-To-Pay-Later] SMS could not be sent: ${(e as Error)?.message ?? e}`));
-    }
-    return savedOrder;
-  }
-
-  /**
-   * Counter: Pay now, collect later (PICKUP). Customer pays at counter; will come to the shop to collect.
-   * orderSource=COUNTER, fulfillmentType=PICKUP, paymentStatus=PAID, fulfillmentStatus=CONFIRMED.
-   */
-  async createCounterPayNowPickupLater(
-    dto: CounterPayNowPickupLaterDto,
-    userId?: number,
-  ): Promise<Order> {
-    const createDto: CreateOrderDto = {
-      ...dto,
-      orderSource: OrderSource.COUNTER,
-      fulfillmentType: FulfillmentType.PICKUP,
-    };
-    const order = await this.createOrder(createDto, userId);
-    const finalOrder = await this.confirmOrder(order.id, {
-      paymentMethod: dto.paymentMethod,
-      transactionId: dto.transactionId,
-      internalNotes: dto.internalNotes,
-    });
-    // SMS (no template): PICKUP+PAID. Fire-and-forget.
-    const cust = (finalOrder as any).customer;
-    const phone = typeof cust?.phoneNumber === 'string' ? cust.phoneNumber.trim() : null;
-    if (phone) {
-      const total = Number(finalOrder.totalPayable ?? 0).toFixed(2);
-      const msg = `Thank you! Your order ${finalOrder.orderNumber} (Nu.${total}) is paid. We'll have it ready for pickup at our store.`;
-      this.smsService
-        .sendSmsNotification({ phoneNumber: phone, message: msg })
-        .then(() => this.logger.log(`[Counter Pay-Now-Pickup-Later] SMS sent to ${phone}`))
-        .catch((e) => this.logger.warn(`[Counter Pay-Now-Pickup-Later] SMS could not be sent: ${(e as Error)?.message ?? e}`));
-    }
-    return finalOrder;
+    return deleted;
   }
 
   /**
@@ -998,6 +196,85 @@ export class OrderService {
       fulfillmentStatus: FulfillmentStatus.CONFIRMED,
       internalNotes,
     });
+  }
+
+  /**
+   * Handle online payment success (e.g. after DR request from gateway).
+   * Marks order PAID, advances fulfillment (PLACED→CONFIRMED, CONFIRMED→PROCESSING), sends payment-success SMS.
+   * Called by payment-settlement when gateway confirms payment.
+   */
+  async handleOnlinePaymentSuccess(
+    orderId: number,
+    params: {
+      paymentMethod: PaymentMethod;
+      paymentDate?: string;
+      internalNotes?: string;
+    },
+  ): Promise<Order> {
+    await this.processPayment(
+      orderId,
+      {
+        paymentMethod: params.paymentMethod,
+        paymentDate: params.paymentDate ?? new Date().toISOString(),
+        internalNotes: params.internalNotes,
+      },
+      true,
+    );
+
+    const updatedOrder = await this.findOneOrder(orderId);
+    if (updatedOrder.fulfillmentStatus === FulfillmentStatus.PLACED) {
+      await this.updateFulfillmentStatus(
+        orderId,
+        {
+          fulfillmentStatus: FulfillmentStatus.CONFIRMED,
+          internalNotes: 'Order confirmed after successful online payment',
+        },
+        true,
+      );
+    } else if (updatedOrder.fulfillmentStatus === FulfillmentStatus.CONFIRMED) {
+      await this.updateFulfillmentStatus(
+        orderId,
+        {
+          fulfillmentStatus: FulfillmentStatus.PROCESSING,
+          internalNotes: 'Order processing started after successful online payment',
+        },
+        true,
+      );
+    }
+
+    const finalOrder = await this.findOneOrder(orderId);
+    this.sendOnlinePaymentSuccessSms(finalOrder);
+    this.logger.log(`[Online Payment Success] Order ID: ${orderId} paid and processing`);
+    return finalOrder;
+  }
+
+  /**
+   * Send single payment-success SMS: delivery (driver/vehicle details) vs pickup (ready at store).
+   */
+  private sendOnlinePaymentSuccessSms(order: Order): void {
+    const customer = (order as any).customer;
+    const phone =
+      typeof customer?.phoneNumber === 'string' ? customer.phoneNumber.trim() : null;
+    if (!phone) return;
+
+    const orderNumber = order.orderNumber || `Order #${order.id}`;
+    const message =
+      order.fulfillmentType === FulfillmentType.DELIVERY
+        ? `Thank you for your payment. We will send driver and vehicle details as soon as possible for your order ${orderNumber}.`
+        : `Thank you for your payment. Your order ${orderNumber} is ready for pickup at our store.`;
+
+    this.smsService
+      .sendSmsNotification({ phoneNumber: phone, message })
+      .then(() =>
+        this.logger.log(
+          `[Online Payment Success] SMS sent to ${phone} for order ${order.id}`,
+        ),
+      )
+      .catch((e) =>
+        this.logger.warn(
+          `[Online Payment Success] SMS failed for order ${order.id}: ${(e as Error)?.message ?? e}`,
+        ),
+      );
   }
 
   async findAllOrders(query?: OrderQueryDto): Promise<Order[]> {
@@ -1599,7 +876,7 @@ export class OrderService {
 
       // Link affiliate marketer if voucher code is provided
       if (updateOrderDto.voucherCode) {
-        const affiliateLink = await this.linkAffiliateMarketerByVoucherCode(
+        const affiliateLink = await this.orderPlacementSupport.linkAffiliateMarketerByVoucherCode(
           updateOrderDto.voucherCode,
         );
 

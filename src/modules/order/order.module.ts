@@ -18,6 +18,9 @@ import { PaymentSettlementModule } from '../external/payment-settlement/payment-
 
 // Supporting Services
 import { OrderSchedulerService } from './services/order-scheduler.service';
+import { OrderPlacementSupportService } from './services/order-placement-support.service';
+import { OnlinePlaceOrderService } from './services/online-place-order.service';
+import { InstorePlaceOrderService } from './services/instore-place-order.service';
 import { SmsTemplateModule } from '../sms-template/sms-template.module';
 import { DiscountModule } from '../discount/discount.module';
 import { PaginationModule } from '../../common/pagination/pagination.module';
@@ -47,6 +50,9 @@ import { PaginationModule } from '../../common/pagination/pagination.module';
   providers: [
     OrderService,
     OrderSchedulerService,
+    OrderPlacementSupportService,
+    OnlinePlaceOrderService,
+    InstorePlaceOrderService,
   ],
   exports: [OrderService],
 })

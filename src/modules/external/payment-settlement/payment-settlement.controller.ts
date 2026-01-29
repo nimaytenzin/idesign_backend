@@ -46,7 +46,8 @@ export class PaymentSettlementController {
   sendAERequest(
     @Body() body: AERequestDTO,
   ): Promise<ClientECMessage | ErrorResponse> {
-    console.log('\n w=debit request received', body);
+    this.logger.log('[ae-request] Request received');
+    this.logger.log(`[ae-request] Body: ${JSON.stringify(body)}`);
     return this.paymentSettlementService.processAERequest(body);
   }
 
@@ -54,7 +55,8 @@ export class PaymentSettlementController {
   sendDRRequest(
     @Body() body: DRRequestDTO,
   ): Promise<ClientDebitSuccessDTO | ErrorResponse> {
-    console.log('\n DR request received', body);
+    this.logger.log('[dr-request] Payment completion (DR) received');
+    this.logger.log(`[dr-request] Body: ${JSON.stringify(body)}`);
     return this.paymentSettlementService.processDRRequest(body);
   }
 }

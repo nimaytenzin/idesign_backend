@@ -18,6 +18,26 @@ export class OrderSchedulerService {
   ) {}
 
   /**
+   * Clean up stale online orders: every 10 minutes.
+   * Deletes orders where source=ONLINE, not PAID, fulfillmentStatus=PLACED, placedAt > 10 minutes ago.
+   */
+  @Cron('*/10 * * * *') // Every 10 minutes
+  async cleanupStaleOnlineOrders() {
+    this.logger.log('Starting stale online orders cleanup cron job');
+    try {
+      const deleted = await this.orderService.cleanupStaleOnlineOrders();
+      if (deleted > 0) {
+        this.logger.log(`Stale online orders cleanup completed: ${deleted} order(s) removed`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Stale online orders cleanup failed: ${(error as Error)?.message}`,
+        (error as Error)?.stack,
+      );
+    }
+  }
+
+  /**
    * Auto-delivery cron job: Runs daily at 9:00 PM (21:00)
    * Marks orders as DELIVERED if they were in SHIPPING status 48+ hours ago
    */

@@ -135,26 +135,6 @@ export class OrderController {
     );
   }
 
-  /**
-   * Counter order (Admin/Staff): single route for pay-now (INSTORE/DELIVERY/PICKUP) or order-to-pay-later.
-   * Body: CreateOrderDto. orderSource forced to COUNTER.
-   * - paymentMethod + INSTORE/DELIVERY → pay now, fulfill (INSTORE=CONFIRMED, DELIVERY=PROCESSING)
-   * - paymentMethod + PICKUP or omitted → pay now, collect later (PICKUP, CONFIRMED+PAID)
-   * - no paymentMethod → order to pay later (PLACED+PENDING); fulfillmentType required: INSTORE|PICKUP|DELIVERY.
-   * When paymentMethod is not CASH, bankAccountId required.
-   * @route POST /orders/admin/counter
-   */
-  @Post('admin/counter')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
-  async createCounterOrder(
-    @Request() req,
-    @Body() createOrderDto: CreateOrderDto,
-  ): Promise<Order> {
-    return this.orderService.createCounterOrder(createOrderDto, req.user?.id);
-  }
-
-
 
   // Order Tracking Endpoint - MUST come before :id route
   @Get('track')

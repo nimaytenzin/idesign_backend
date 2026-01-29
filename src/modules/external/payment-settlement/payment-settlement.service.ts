@@ -11,9 +11,6 @@ import {
 import { PaymentInitiationResponseDTO } from './dto/payment-settlement.response';
 import { ErrorResponse } from './error-reponse';
 import { OrderService } from '../../order/order.service';
-import { SmsService } from '../sms/sms.service';
-import { SmsMessageFormatter } from '../sms/sms-message.formatter';
-import { SendSmsNotificationDto } from '../sms/dto/create-sm.dto';
 import { FulfillmentStatus, PaymentMethod } from '../../order/entities/order.enums';
 
 @Injectable()
@@ -25,8 +22,6 @@ export class PaymentSettlementService {
   constructor(
     private httpService: HttpService,
     private orderService: OrderService,
-    private smsService: SmsService,
-    private smsFormatter: SmsMessageFormatter,
   ) {}
 
   /**
@@ -377,77 +372,18 @@ export class PaymentSettlementService {
       }
 
       if (zpsDRResponse.statusCode === '00') {
-        // Transaction successful - process payment (skip SMS)
-        await this.orderService.processPayment(order.id, {
-          paymentMethod: PaymentMethod.ZPSS,
-          paymentDate: new Date().toISOString(),
-          internalNotes: `Payment completed via ZPSS. BFS Transaction ID: ${data.bfsTransactionId}. Payment Instruction Number: ${zpsDRResponse.paymentInstructionNumber}`,
-        }, true); // Skip SMS
-
-        // Get updated order details
-        const updatedOrder = await this.orderService.findOneOrder(order.id);
-
-        // Update fulfillment status based on current status (skip SMS)
-        if (updatedOrder.fulfillmentStatus === FulfillmentStatus.PLACED) {
-          await this.orderService.updateFulfillmentStatus(order.id, {
-            fulfillmentStatus: FulfillmentStatus.CONFIRMED,
-            internalNotes: 'Order confirmed after successful ZPSS payment',
-          }, true); // Skip SMS
-        } else if (updatedOrder.fulfillmentStatus === FulfillmentStatus.CONFIRMED) {
-          await this.orderService.updateFulfillmentStatus(order.id, {
-            fulfillmentStatus: FulfillmentStatus.PROCESSING,
-            internalNotes: 'Order processing started after successful ZPSS payment',
-          }, true); // Skip SMS
-        }
-
-        // Reload order to get updated status
-        const finalOrder = await this.orderService.findOneOrder(order.id);
-
-        // Send ONLY ONE SMS notification
-        try {
-          const orderNumber = finalOrder.orderNumber || `Order #${finalOrder.id}`;
-          const smsMessage = `Thank you for your payment. Payment details received. We will process your order ${orderNumber} as soon as possible.`;
-
-          // Validate the message before sending
-          const validation = this.smsFormatter.validateMessage(smsMessage);
-          if (!validation.isValid) {
-            this.logger.warn(`SMS validation failed: ${validation.error}`);
-          } else {
-            const customerPhone = finalOrder.customer?.phoneNumber;
-            if (customerPhone) {
-              const smsData: SendSmsNotificationDto = {
-                phoneNumber: customerPhone,
-                message: smsMessage,
-                senderName: 'iDesign',
-              };
-
-              this.logger.log(
-                `Sending payment confirmation SMS to ${customerPhone}`,
-              );
-              const smsResult = await this.smsService.sendSmsNotification(smsData);
-
-              if (smsResult.success) {
-                this.logger.log(
-                  `SMS notification sent successfully for order ID: ${order.id}`,
-                );
-              } else {
-                this.logger.warn(
-                  `SMS notification failed for order ID: ${order.id}: ${smsResult.message}`,
-                );
-              }
-            }
-          }
-        } catch (smsError) {
-          // Don't fail the payment process if SMS fails - just log the error
-          this.logger.error(
-            `Failed to send SMS notification for order ID: ${order.id}:`,
-            smsError.message,
-          );
-        }
+        // Payment successful: delegate order update and SMS to order module
+        const finalOrder = await this.orderService.handleOnlinePaymentSuccess(
+          order.id,
+          {
+            paymentMethod: PaymentMethod.ZPSS,
+            paymentDate: new Date().toISOString(),
+            internalNotes: `Payment completed via ZPSS. BFS Transaction ID: ${data.bfsTransactionId}. Payment Instruction Number: ${zpsDRResponse.paymentInstructionNumber}`,
+          },
+        );
 
         this.logger.log(`Payment successful for order ID: ${order.id}`);
 
-        // Return success response
         return {
           statusCode: zpsDRResponse.statusCode,
           order: finalOrder,
