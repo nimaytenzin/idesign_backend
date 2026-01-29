@@ -565,13 +565,6 @@ export class OrderService {
       );
     }
 
-    // Validate payment method is provided and is CASH or bank transfer
-    if (!createOrderDto.paymentMethod) {
-      throw new BadRequestException(
-        'Payment must be made to create order instore',
-      );
-    }
-
     // Use transaction for atomicity
     return this.sequelize.transaction(async (transaction) => {
       // Find or create customer
@@ -830,6 +823,8 @@ export class OrderService {
 
       // Create payment receipt (full amount) and sync order payment summary to PAID
       // When payment method is not CASH, bankAccountId is required (enforced by CreateOrderDto)
+      //if no payment method is provided, dont create a payment receipt
+     if(createOrderDto.paymentMethod){
       await this.paymentReceiptService.createPaymentReceipt(
         order.id,
         {
@@ -840,6 +835,7 @@ export class OrderService {
         },
         transaction,
       );
+     }
 
       // Reload order with relations
       const savedOrder = await this.orderModel.findByPk(order.id, {
